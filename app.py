@@ -64,8 +64,10 @@ for feature in predictors:
         if min_v is not None and max_v is not None:
             help_txt = f"Faixa observada no banco de desenvolvimento: {min_v:g} a {max_v:g}."
 
-        default = 0.0 if median_v is None else float(median_v)
+        default = 0 if median_v is None else int(round(median_v))
         valores[feature] = st.number_input(
+            step=1,
+            format="%d",
             label,
             value=default,
             help=help_txt,

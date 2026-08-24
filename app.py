@@ -107,22 +107,44 @@ for feature in predictors:
     # =====================================================
     # VARIÁVEIS CATEGÓRICAS
     # =====================================================
-    elif meta.get("type") == "categorical":
+        elif meta.get("type") == "categorical":
 
         options = meta.get("options", [])
 
-        if not options:
+        # Nomes amigáveis exibidos na interface.
+        # O valor original continua sendo enviado ao modelo.
+        mapa_exibicao = {
+            # Respostas Sim / Não
+            "s": "Sim",
+            "n": "Não",
 
+            # Localização do tumor
+            "colon_direito": "Cólon direito",
+            "colon_esquerdo": "Cólon esquerdo",
+            "reto_inferior": "Reto inferior",
+            "reto_medio": "Reto médio",
+            "retossigmoide": "Retossigmoide",
+            "sincronico": "Sincrônico",
+
+            # Abordagem cirúrgica
+            "convencional": "Convencional",
+            "laparoscopica": "Laparoscópica",
+        }
+
+        if not options:
             valores[feature] = st.text_input(
                 label,
                 key=feature,
             )
 
         else:
-
             valores[feature] = st.selectbox(
                 label,
                 options=options,
+                format_func=lambda x: mapa_exibicao.get(
+                    str(x),
+                    str(x).replace("_", " ").capitalize()
+                ),
                 key=feature,
             )
 

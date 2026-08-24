@@ -3,6 +3,10 @@ import joblib
 import pandas as pd
 from pathlib import Path
 
+# =========================================================
+# CONFIGURAÇÃO DA PÁGINA
+# =========================================================
+
 st.set_page_config(
     page_title="CCR | Risco de internação prolongada",
     page_icon="🏥",
@@ -17,21 +21,39 @@ def carregar_bundle():
     return joblib.load(BUNDLE_PATH)
 
 
+# =========================================================
+# CARREGAMENTO DO MODELO
+# =========================================================
+
 bundle = carregar_bundle()
+
 model = bundle["model"]
 predictors = bundle["predictors"]
 schema = bundle.get("ui_schema", {})
 threshold = bundle.get("clinical_threshold")
 family = bundle.get("family", "Modelo")
 
+
+# =========================================================
+# CABEÇALHO
+# =========================================================
+
 st.title("Predição de internação prolongada")
-st.caption("Pacientes submetidos à cirurgia por câncer colorretal")
+
+st.caption(
+    "Pacientes submetidos à cirurgia por câncer colorretal"
+)
 
 st.info(
     "Protótipo de apoio à decisão para estimar risco de internação > 7 dias. "
     "Não substitui avaliação clínica e requer validação externa/prospectiva "
     "antes de uso assistencial."
 )
+
+
+# =========================================================
+# VERIFICAÇÃO DO THRESHOLD
+# =========================================================
 
 if threshold is None:
     st.error(
@@ -40,9 +62,20 @@ if threshold is None:
     )
     st.stop()
 
+
+# =========================================================
+# BARRA LATERAL
+# =========================================================
+
 st.sidebar.header("Modelo")
-st.sidebar.write(f"**Algoritmo:** {family}")
-st.sidebar.write(f"**Threshold operacional:** {threshold:.2f}")
+
+st.sidebar.write(
+    f"**Algoritmo:** {family}"
+)
+
+st.sidebar.write(
+    f"**Threshold operacional:** {threshold:.2f}"
+)
 
 st.sidebar.write(
     f"**Meta de sensibilidade:** "
@@ -53,18 +86,63 @@ st.sidebar.caption(
     bundle.get("threshold_rule", "")
 )
 
+
+# =========================================================
+# NOMES AMIGÁVEIS DAS CATEGORIAS
+# =========================================================
+
+mapa_exibicao = {
+
+    # Sim / Não
+    "s": "Sim",
+    "n": "Não",
+
+    # Localização do tumor
+    "colon_direito": "Cólon direito",
+    "colon_esquerdo": "Cólon esquerdo",
+    "reto_inferior": "Reto inferior",
+    "reto_medio": "Reto médio",
+    "retossigmoide": "Retossigmoide",
+    "sincronico": "Sincrônico",
+
+    # Abordagem cirúrgica
+    "convencional": "Convencional",
+    "laparoscopica": "Laparoscópica",
+}
+
+
+def formatar_categoria(valor):
+    """
+    Altera apenas a apresentação da categoria.
+    O valor original continua sendo enviado ao modelo.
+    """
+
+    texto = str(valor)
+
+    if texto in mapa_exibicao:
+        return mapa_exibicao[texto]
+
+    return texto.replace("_", " ").capitalize()
+
+
+# =========================================================
+# DADOS DO PACIENTE
+# =========================================================
+
 st.subheader("Dados do paciente")
 
 valores = {}
+
 
 for feature in predictors:
 
     meta = schema.get(feature, {})
     label = meta.get("label", feature)
 
-    # =====================================================
-    # VARIÁVEIS QUANTITATIVAS DISCRETAS
-    # =====================================================
+    # -----------------------------------------------------
+    # VARIÁVEIS QUANTITATIVAS
+    # -----------------------------------------------------
+
     if meta.get("type") == "numeric":
 
         min_v = meta.get("min")
@@ -104,53 +182,34 @@ for feature in predictors:
             key=feature,
         )
 
-    # =====================================================
+    # -----------------------------------------------------
     # VARIÁVEIS CATEGÓRICAS
-    # =====================================================
-        elif meta.get("type") == "categorical":
+    # -----------------------------------------------------
+
+    elif meta.get("type") == "categorical":
 
         options = meta.get("options", [])
 
-        # Nomes amigáveis exibidos na interface.
-        # O valor original continua sendo enviado ao modelo.
-        mapa_exibicao = {
-            # Respostas Sim / Não
-            "s": "Sim",
-            "n": "Não",
-
-            # Localização do tumor
-            "colon_direito": "Cólon direito",
-            "colon_esquerdo": "Cólon esquerdo",
-            "reto_inferior": "Reto inferior",
-            "reto_medio": "Reto médio",
-            "retossigmoide": "Retossigmoide",
-            "sincronico": "Sincrônico",
-
-            # Abordagem cirúrgica
-            "convencional": "Convencional",
-            "laparoscopica": "Laparoscópica",
-        }
-
         if not options:
+
             valores[feature] = st.text_input(
                 label,
                 key=feature,
             )
 
         else:
+
             valores[feature] = st.selectbox(
                 label,
                 options=options,
-                format_func=lambda x: mapa_exibicao.get(
-                    str(x),
-                    str(x).replace("_", " ").capitalize()
-                ),
+                format_func=formatar_categoria,
                 key=feature,
             )
 
-    # =====================================================
+    # -----------------------------------------------------
     # FALLBACK
-    # =====================================================
+    # -----------------------------------------------------
+
     else:
 
         valores[feature] = st.text_input(
@@ -159,7 +218,12 @@ for feature in predictors:
         )
 
 
+# =========================================================
+# PREDIÇÃO
+# =========================================================
+
 st.divider()
+
 
 if st.button(
     "Calcular risco",
@@ -190,7 +254,13 @@ if st.button(
         st.exception(exc)
         st.stop()
 
+
     alto_risco = prob >= threshold
+
+
+    # =====================================================
+    # RESULTADO
+    # =====================================================
 
     st.subheader("Resultado")
 
@@ -206,6 +276,7 @@ if st.button(
         )
     )
 
+
     if alto_risco:
 
         st.error(
@@ -220,12 +291,18 @@ if st.button(
             f"< threshold {threshold:.0%}."
         )
 
+
     st.caption(
         "A classificação decorre do threshold operacional "
         "definido no notebook. O valor de probabilidade deve "
         "ser interpretado no contexto do desempenho e da "
         "calibração do modelo."
     )
+
+
+    # =====================================================
+    # DADOS UTILIZADOS
+    # =====================================================
 
     with st.expander(
         "Dados usados na predição"
@@ -248,6 +325,10 @@ if st.button(
             hide_index=True,
         )
 
+
+# =========================================================
+# SOBRE O PROTÓTIPO
+# =========================================================
 
 with st.expander(
     "Sobre este protótipo"

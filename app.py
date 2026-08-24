@@ -10,7 +10,7 @@ from pathlib import Path
 st.set_page_config(
     page_title="CCR | Risco de internação prolongada",
     page_icon="🏥",
-    layout="centered",
+    layout="wide",
 )
 
 BUNDLE_PATH = Path(__file__).with_name("27_deployment_bundle.joblib")
@@ -112,11 +112,6 @@ mapa_exibicao = {
 
 
 def formatar_categoria(valor):
-    """
-    Altera apenas a apresentação da categoria.
-    O valor original continua sendo enviado ao modelo.
-    """
-
     texto = str(valor)
 
     if texto in mapa_exibicao:
@@ -126,21 +121,19 @@ def formatar_categoria(valor):
 
 
 # =========================================================
-# DADOS DO PACIENTE
+# FUNÇÃO PARA CRIAR CADA CAMPO
 # =========================================================
-
-st.subheader("Dados do paciente")
 
 valores = {}
 
 
-for feature in predictors:
+def criar_campo(feature):
 
     meta = schema.get(feature, {})
     label = meta.get("label", feature)
 
     # -----------------------------------------------------
-    # VARIÁVEIS QUANTITATIVAS
+    # QUANTITATIVAS DISCRETAS
     # -----------------------------------------------------
 
     if meta.get("type") == "numeric":
@@ -183,7 +176,7 @@ for feature in predictors:
         )
 
     # -----------------------------------------------------
-    # VARIÁVEIS CATEGÓRICAS
+    # CATEGÓRICAS
     # -----------------------------------------------------
 
     elif meta.get("type") == "categorical":
@@ -216,6 +209,126 @@ for feature in predictors:
             label,
             key=feature,
         )
+
+
+# =========================================================
+# GRUPOS DAS VARIÁVEIS
+# =========================================================
+
+st.subheader("Dados do paciente")
+
+# ---------------------------------------------------------
+# 1. DADOS DEMOGRÁFICOS
+# ---------------------------------------------------------
+
+with st.container(border=True):
+
+    st.markdown("### 👤 Dados demográficos")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "sexo_int" in predictors:
+            criar_campo("sexo_int")
+
+        if "idade_anos_diag" in predictors:
+            criar_campo("idade_anos_diag")
+
+    with col2:
+        if "f_idade_anos_int" in predictors:
+            criar_campo("f_idade_anos_int")
+
+
+# ---------------------------------------------------------
+# 2. CONDIÇÃO CLÍNICA E ONCOLÓGICA
+# ---------------------------------------------------------
+
+with st.container(border=True):
+
+    st.markdown("### 🩺 Condição clínica e oncológica")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "f_asa" in predictors:
+            criar_campo("f_asa")
+
+        if "f_estagio" in predictors:
+            criar_campo("f_estagio")
+
+    with col2:
+        if "f_localizacao" in predictors:
+            criar_campo("f_localizacao")
+
+        if "f_neoadjuvancia" in predictors:
+            criar_campo("f_neoadjuvancia")
+
+
+# ---------------------------------------------------------
+# 3. PROCEDIMENTO CIRÚRGICO
+# ---------------------------------------------------------
+
+with st.container(border=True):
+
+    st.markdown("### 🏥 Procedimento cirúrgico")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "f_abord_cirurgica" in predictors:
+            criar_campo("f_abord_cirurgica")
+
+        if "tempo_cir_min2" in predictors:
+            criar_campo("tempo_cir_min2")
+
+    with col2:
+        if "num_orgaos_envolvidos" in predictors:
+            criar_campo("num_orgaos_envolvidos")
+
+        if "urgencia" in predictors:
+            criar_campo("urgencia")
+
+
+# ---------------------------------------------------------
+# 4. INTERNAÇÃO E CUIDADOS INTENSIVOS
+# ---------------------------------------------------------
+
+with st.container(border=True):
+
+    st.markdown("### 🛏️ Internação e cuidados intensivos")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "tempo_int_cir_dias" in predictors:
+            criar_campo("tempo_int_cir_dias")
+
+    with col2:
+        if "uti" in predictors:
+            criar_campo("uti")
+
+
+# =========================================================
+# SEGURANÇA: DETECTA EVENTUAL PREDITOR NÃO EXIBIDO
+# =========================================================
+
+faltantes = [
+    feature
+    for feature in predictors
+    if feature not in valores
+]
+
+if faltantes:
+
+    st.warning(
+        "Existem variáveis do modelo ainda não organizadas "
+        "nos grupos principais."
+    )
+
+    with st.expander("Outras variáveis"):
+
+        for feature in faltantes:
+            criar_campo(feature)
 
 
 # =========================================================
@@ -299,10 +412,6 @@ if st.button(
         "calibração do modelo."
     )
 
-
-    # =====================================================
-    # DADOS UTILIZADOS
-    # =====================================================
 
     with st.expander(
         "Dados usados na predição"

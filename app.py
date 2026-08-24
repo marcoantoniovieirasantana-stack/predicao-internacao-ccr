@@ -61,18 +61,23 @@ for feature in predictors:
         # Streamlit aceita entrada numérica sem impor min/max.
         # Os limites observados no desenvolvimento são mostrados apenas como ajuda.
         help_txt = None
-        if min_v is not None and max_v is not None:
-            help_txt = f"Faixa observada no banco de desenvolvimento: {min_v:g} a {max_v:g}."
+if min_v is not None and max_v is not None:
+    help_txt = (
+        f"Faixa observada no banco de desenvolvimento: "
+        f"{int(round(min_v))} a {int(round(max_v))}."
+    )
 
         default = 0 if median_v is None else int(round(median_v))
         valores[feature] = st.number_input(
-            step=1,
-            format="%d",
-            label,
-            value=default,
-            help=help_txt,
-            key=feature,
-        )
+    label,
+    min_value=int(round(min_v)) if min_v is not None else None,
+    max_value=int(round(max_v)) if max_v is not None else None,
+    value=default,
+    step=1,
+    format="%d",
+    help=help_txt,
+    key=feature,
+)
 
     elif meta.get("type") == "categorical":
         options = meta.get("options", [])

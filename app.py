@@ -32,6 +32,7 @@ predictors = bundle["predictors"]
 schema = bundle.get("ui_schema", {})
 threshold = bundle.get("clinical_threshold")
 family = bundle.get("family", "Modelo")
+sensibilidade_meta = bundle.get("min_sensitivity_target")
 
 
 # =========================================================
@@ -74,13 +75,13 @@ st.sidebar.write(
 )
 
 st.sidebar.write(
-    f"**Threshold operacional:** {threshold:.2f}"
+    f"**Threshold operacional:** {threshold:.0%}"
 )
 
-st.sidebar.write(
-    f"**Meta de sensibilidade:** "
-    f"{bundle.get('min_sensitivity_target', float('nan')):.0%}"
-)
+if sensibilidade_meta is not None:
+    st.sidebar.write(
+        f"**Meta de sensibilidade:** {sensibilidade_meta:.0%}"
+    )
 
 st.sidebar.caption(
     bundle.get("threshold_rule", "")
@@ -112,6 +113,7 @@ mapa_exibicao = {
 
 
 def formatar_categoria(valor):
+
     texto = str(valor)
 
     if texto in mapa_exibicao:
@@ -133,7 +135,7 @@ def criar_campo(feature):
     label = meta.get("label", feature)
 
     # -----------------------------------------------------
-    # QUANTITATIVAS DISCRETAS
+    # VARIÁVEIS QUANTITATIVAS DISCRETAS
     # -----------------------------------------------------
 
     if meta.get("type") == "numeric":
@@ -176,7 +178,7 @@ def criar_campo(feature):
         )
 
     # -----------------------------------------------------
-    # CATEGÓRICAS
+    # VARIÁVEIS CATEGÓRICAS
     # -----------------------------------------------------
 
     elif meta.get("type") == "categorical":
@@ -212,10 +214,11 @@ def criar_campo(feature):
 
 
 # =========================================================
-# GRUPOS DAS VARIÁVEIS
+# DADOS DO PACIENTE
 # =========================================================
 
 st.subheader("Dados do paciente")
+
 
 # ---------------------------------------------------------
 # 1. DADOS DEMOGRÁFICOS
@@ -228,6 +231,7 @@ with st.container(border=True):
     col1, col2 = st.columns(2)
 
     with col1:
+
         if "sexo_int" in predictors:
             criar_campo("sexo_int")
 
@@ -235,6 +239,7 @@ with st.container(border=True):
             criar_campo("idade_anos_diag")
 
     with col2:
+
         if "f_idade_anos_int" in predictors:
             criar_campo("f_idade_anos_int")
 
@@ -250,6 +255,7 @@ with st.container(border=True):
     col1, col2 = st.columns(2)
 
     with col1:
+
         if "f_asa" in predictors:
             criar_campo("f_asa")
 
@@ -257,6 +263,7 @@ with st.container(border=True):
             criar_campo("f_estagio")
 
     with col2:
+
         if "f_localizacao" in predictors:
             criar_campo("f_localizacao")
 
@@ -275,6 +282,7 @@ with st.container(border=True):
     col1, col2 = st.columns(2)
 
     with col1:
+
         if "f_abord_cirurgica" in predictors:
             criar_campo("f_abord_cirurgica")
 
@@ -282,6 +290,7 @@ with st.container(border=True):
             criar_campo("tempo_cir_min2")
 
     with col2:
+
         if "num_orgaos_envolvidos" in predictors:
             criar_campo("num_orgaos_envolvidos")
 
@@ -300,16 +309,18 @@ with st.container(border=True):
     col1, col2 = st.columns(2)
 
     with col1:
+
         if "tempo_int_cir_dias" in predictors:
             criar_campo("tempo_int_cir_dias")
 
     with col2:
+
         if "uti" in predictors:
             criar_campo("uti")
 
 
 # =========================================================
-# SEGURANÇA: DETECTA EVENTUAL PREDITOR NÃO EXIBIDO
+# SEGURANÇA: PREDITORES NÃO ORGANIZADOS
 # =========================================================
 
 faltantes = [
@@ -332,17 +343,25 @@ if faltantes:
 
 
 # =========================================================
-# PREDIÇÃO
+# BOTÃO
 # =========================================================
 
 st.divider()
 
+st.markdown("## Predição")
 
-if st.button(
-    "Calcular risco",
+calcular = st.button(
+    "Calcular risco de internação prolongada",
     type="primary",
     use_container_width=True,
-):
+)
+
+
+# =========================================================
+# PREDIÇÃO
+# =========================================================
+
+if calcular:
 
     novo_paciente = pd.DataFrame(
         [valores],
@@ -372,46 +391,135 @@ if st.button(
 
 
     # =====================================================
-    # RESULTADO
+    # PAINEL PRINCIPAL DO RESULTADO
     # =====================================================
 
-    st.subheader("Resultado")
+    st.markdown("## Resultado")
 
-    st.metric(
-        "Probabilidade estimada de internação > 7 dias",
-        f"{prob:.1%}",
-    )
+    with st.container(border=True):
 
-    st.progress(
-        min(
-            max(prob, 0.0),
-            1.0,
-        )
-    )
+        # -------------------------------------------------
+        # LINHA PRINCIPAL
+        # -------------------------------------------------
 
-
-    if alto_risco:
-
-        st.error(
-            f"ALTO RISCO — probabilidade {prob:.1%} "
-            f"≥ threshold {threshold:.0%}."
+        col_prob, col_risco = st.columns(
+            [1.3, 1]
         )
 
-    else:
+        with col_prob:
 
-        st.success(
-            f"BAIXO RISCO — probabilidade {prob:.1%} "
-            f"< threshold {threshold:.0%}."
+            st.metric(
+                "Probabilidade de internação > 7 dias",
+                f"{prob:.1%}",
+            )
+
+        with col_risco:
+
+            if alto_risco:
+
+                st.metric(
+                    "Classificação",
+                    "ALTO RISCO",
+                )
+
+            else:
+
+                st.metric(
+                    "Classificação",
+                    "BAIXO RISCO",
+                )
+
+
+        # -------------------------------------------------
+        # BARRA DE PROBABILIDADE
+        # -------------------------------------------------
+
+        st.markdown("**Probabilidade estimada**")
+
+        st.progress(
+            min(
+                max(prob, 0.0),
+                1.0,
+            )
         )
 
 
-    st.caption(
-        "A classificação decorre do threshold operacional "
-        "definido no notebook. O valor de probabilidade deve "
-        "ser interpretado no contexto do desempenho e da "
-        "calibração do modelo."
+        # -------------------------------------------------
+        # INTERPRETAÇÃO
+        # -------------------------------------------------
+
+        if alto_risco:
+
+            st.error(
+                f"⚠️ **Alto risco de internação prolongada.** "
+                f"A probabilidade estimada foi de **{prob:.1%}**, "
+                f"igual ou superior ao threshold operacional "
+                f"de **{threshold:.0%}**."
+            )
+
+        else:
+
+            st.success(
+                f"✅ **Baixo risco de internação prolongada.** "
+                f"A probabilidade estimada foi de **{prob:.1%}**, "
+                f"inferior ao threshold operacional "
+                f"de **{threshold:.0%}**."
+            )
+
+
+        # -------------------------------------------------
+        # INFORMAÇÕES OPERACIONAIS
+        # -------------------------------------------------
+
+        st.markdown("#### Parâmetros de decisão")
+
+        if sensibilidade_meta is not None:
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                st.metric(
+                    "Threshold operacional",
+                    f"{threshold:.0%}",
+                )
+
+            with col2:
+
+                st.metric(
+                    "Meta de sensibilidade",
+                    f"{sensibilidade_meta:.0%}",
+                )
+
+        else:
+
+            st.metric(
+                "Threshold operacional",
+                f"{threshold:.0%}",
+            )
+
+
+        st.caption(
+            "A classificação resulta da comparação entre a "
+            "probabilidade estimada pelo modelo e o threshold "
+            "operacional definido no notebook."
+        )
+
+
+    # =====================================================
+    # AVISO DE INTERPRETAÇÃO
+    # =====================================================
+
+    st.info(
+        "A probabilidade deve ser interpretada em conjunto "
+        "com o desempenho, a calibração e as limitações do modelo. "
+        "O resultado não substitui a avaliação clínica."
     )
 
+
+    # =====================================================
+    # DADOS UTILIZADOS
+    # =====================================================
 
     with st.expander(
         "Dados usados na predição"
@@ -439,6 +547,8 @@ if st.button(
 # SOBRE O PROTÓTIPO
 # =========================================================
 
+st.divider()
+
 with st.expander(
     "Sobre este protótipo"
 ):
@@ -446,7 +556,19 @@ with st.expander(
     st.write(
         "O modelo foi desenvolvido para o desfecho de "
         "internação prolongada (>7 dias) após cirurgia por "
-        "câncer colorretal. O Streamlit apenas aplica o "
-        "pipeline salvo; não realiza treinamento ou "
-        "recalibração."
+        "câncer colorretal."
+    )
+
+    st.write(
+        "A aplicação Streamlit utiliza o pipeline previamente "
+        "treinado e salvo. A aplicação não realiza novo "
+        "treinamento, otimização de hiperparâmetros ou "
+        "recalibração durante a predição."
+    )
+
+    st.write(
+        "O resultado deve ser considerado uma ferramenta "
+        "experimental de apoio à decisão e requer validação "
+        "externa/prospectiva antes de eventual utilização "
+        "assistencial."
     )

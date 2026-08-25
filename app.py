@@ -6,6 +6,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from supabase import create_client
 
+
 # =========================================================
 # CONFIGURAÇÃO DA PÁGINA
 # =========================================================
@@ -133,6 +134,13 @@ def criar_campo(feature):
         "label",
         feature,
     )
+
+    # -----------------------------------------------------
+    # tempo_int_cir_dias NÃO É DIGITADO
+    # -----------------------------------------------------
+
+    if feature == "tempo_int_cir_dias":
+        return
 
     # -----------------------------------------------------
     # VARIÁVEIS QUANTITATIVAS
@@ -371,6 +379,38 @@ with aba_predicao:
             format="DD/MM/YYYY",
         )
 
+
+    # =====================================================
+    # CÁLCULO AUTOMÁTICO DO TEMPO
+    # =====================================================
+
+    if data_cirurgia >= data_internacao:
+
+        tempo_int_cir_dias = (
+            data_cirurgia
+            - data_internacao
+        ).days
+
+        valores[
+            "tempo_int_cir_dias"
+        ] = tempo_int_cir_dias
+
+        st.info(
+            f"**Tempo entre internação e cirurgia:** "
+            f"{tempo_int_cir_dias} dia"
+            f"{'s' if tempo_int_cir_dias != 1 else ''}."
+        )
+
+    else:
+
+        tempo_int_cir_dias = None
+
+        st.error(
+            "A data da cirurgia não pode ser "
+            "anterior à data da internação."
+        )
+
+
     # =====================================================
     # DADOS DO PACIENTE
     # =====================================================
@@ -516,13 +556,21 @@ with aba_predicao:
 
         with col1:
 
-            if (
-                "tempo_int_cir_dias"
-                in predictors
-            ):
+            st.markdown(
+                "**Tempo entre internação e cirurgia (dias)**"
+            )
 
-                criar_campo(
-                    "tempo_int_cir_dias"
+            if tempo_int_cir_dias is not None:
+
+                st.metric(
+                    "Calculado automaticamente",
+                    tempo_int_cir_dias,
+                )
+
+            else:
+
+                st.warning(
+                    "Revise as datas informadas."
                 )
 
         with col2:
@@ -541,6 +589,7 @@ with aba_predicao:
         feature
         for feature in predictors
         if feature not in valores
+        and feature != "tempo_int_cir_dias"
     ]
 
     if faltantes:
@@ -565,6 +614,7 @@ with aba_predicao:
         use_container_width=True,
     )
 
+
     if calcular:
 
         # -------------------------------------------------
@@ -579,6 +629,7 @@ with aba_predicao:
 
             st.stop()
 
+
         if data_cirurgia < data_internacao:
 
             st.error(
@@ -587,6 +638,24 @@ with aba_predicao:
             )
 
             st.stop()
+
+
+        if tempo_int_cir_dias is None:
+
+            st.error(
+                "Não foi possível calcular o tempo entre "
+                "internação e cirurgia."
+            )
+
+            st.stop()
+
+
+        # Garante o valor derivado antes de montar o DataFrame
+        valores[
+            "tempo_int_cir_dias"
+        ] = int(
+            tempo_int_cir_dias
+        )
 
 
         # -------------------------------------------------
@@ -811,6 +880,12 @@ with aba_predicao:
         )
 
         st.write(
+            f"**Tempo entre internação e cirurgia:** "
+            f"{tempo_int_cir_dias} dia"
+            f"{'s' if tempo_int_cir_dias != 1 else ''}"
+        )
+
+        st.write(
             "**ID da predição:**"
         )
 
@@ -931,14 +1006,11 @@ with aba_auditoria:
         )
 
 
-        # -------------------------------------------------
-        # IDENTIFICAÇÃO
-        # -------------------------------------------------
-
         st.write(
             f"**Prontuário:** "
             f"{registro_auditoria.get('prontuario', '')}"
         )
+
 
         if registro_auditoria.get(
             "data_internacao"
@@ -955,6 +1027,7 @@ with aba_auditoria:
                 f"{data_int.strftime('%d/%m/%Y')}"
             )
 
+
         if registro_auditoria.get(
             "data_cirurgia"
         ):
@@ -968,6 +1041,16 @@ with aba_auditoria:
             st.write(
                 f"**Data da cirurgia:** "
                 f"{data_cir.strftime('%d/%m/%Y')}"
+            )
+
+
+        if registro_auditoria.get(
+            "tempo_int_cir_dias"
+        ) is not None:
+
+            st.write(
+                f"**Tempo entre internação e cirurgia:** "
+                f"{registro_auditoria['tempo_int_cir_dias']} dias"
             )
 
 
@@ -1216,6 +1299,11 @@ with st.expander(
     st.write(
         "Cada predição é registrada antes que "
         "o desfecho real seja conhecido."
+    )
+
+    st.write(
+        "O tempo entre internação e cirurgia é "
+        "calculado automaticamente pelas datas informadas."
     )
 
     st.write(

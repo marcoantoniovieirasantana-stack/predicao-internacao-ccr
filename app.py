@@ -18,9 +18,71 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+
 BUNDLE_PATH = Path(__file__).with_name(
     "27_deployment_bundle.joblib"
 )
+
+
+# =========================================================
+# LIMPEZA AO INICIAR UMA NOVA SESSÃO
+# =========================================================
+
+if "app_inicializado" not in st.session_state:
+
+    chaves_para_limpar = [
+        chave
+        for chave in list(st.session_state.keys())
+        if (
+            chave.startswith("pred_")
+            or chave.startswith("auditoria_")
+            or chave in [
+                "registro_auditoria",
+                "prontuario",
+                "data_internacao",
+                "data_cirurgia",
+            ]
+        )
+    ]
+
+    for chave in chaves_para_limpar:
+        st.session_state.pop(
+            chave,
+            None,
+        )
+
+    st.session_state[
+        "app_inicializado"
+    ] = True
+
+
+# =========================================================
+# FUNÇÃO NOVO CADASTRO
+# =========================================================
+
+def limpar_novo_cadastro():
+
+    chaves_para_limpar = [
+        chave
+        for chave in list(st.session_state.keys())
+        if (
+            chave.startswith("pred_")
+            or chave.startswith("auditoria_")
+            or chave in [
+                "registro_auditoria",
+                "prontuario",
+                "data_internacao",
+                "data_cirurgia",
+            ]
+        )
+    ]
+
+    for chave in chaves_para_limpar:
+
+        st.session_state.pop(
+            chave,
+            None,
+        )
 
 
 # =========================================================
@@ -143,16 +205,34 @@ st.markdown(
 
 @st.cache_resource
 def carregar_bundle():
-    return joblib.load(BUNDLE_PATH)
+
+    return joblib.load(
+        BUNDLE_PATH
+    )
 
 
 bundle = carregar_bundle()
 
 model = bundle["model"]
-predictors = bundle["predictors"]
-schema = bundle.get("ui_schema", {})
-threshold = bundle.get("clinical_threshold")
-family = bundle.get("family", "Modelo")
+
+predictors = bundle[
+    "predictors"
+]
+
+schema = bundle.get(
+    "ui_schema",
+    {},
+)
+
+threshold = bundle.get(
+    "clinical_threshold"
+)
+
+family = bundle.get(
+    "family",
+    "Modelo",
+)
+
 sensibilidade_meta = bundle.get(
     "min_sensitivity_target"
 )
@@ -165,8 +245,13 @@ sensibilidade_meta = bundle.get(
 @st.cache_resource
 def conectar_supabase():
 
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
+    url = st.secrets[
+        "supabase"
+    ]["url"]
+
+    key = st.secrets[
+        "supabase"
+    ]["key"]
 
     return create_client(
         url,
@@ -175,33 +260,41 @@ def conectar_supabase():
 
 
 try:
-    supabase = conectar_supabase()
+
+    supabase = (
+        conectar_supabase()
+    )
 
 except Exception as exc:
 
     st.error(
-        "Não foi possível conectar ao banco de auditoria."
+        "Não foi possível conectar "
+        "ao banco de auditoria."
     )
 
-    st.exception(exc)
+    st.exception(
+        exc
+    )
+
     st.stop()
 
 
 # =========================================================
-# VALIDAÇÃO DO MODELO
+# VALIDAÇÃO DO THRESHOLD
 # =========================================================
 
 if threshold is None:
 
     st.error(
-        "O bundle não possui threshold operacional definido."
+        "O bundle não possui threshold "
+        "operacional definido."
     )
 
     st.stop()
 
 
 # =========================================================
-# CATEGORIAS
+# CATEGORIAS AMIGÁVEIS
 # =========================================================
 
 mapa_exibicao = {
@@ -209,28 +302,55 @@ mapa_exibicao = {
     "s": "Sim",
     "n": "Não",
 
-    "colon_direito": "Cólon direito",
-    "colon_esquerdo": "Cólon esquerdo",
-    "reto_inferior": "Reto inferior",
-    "reto_medio": "Reto médio",
-    "retossigmoide": "Retossigmoide",
-    "sincronico": "Sincrônico",
+    "colon_direito":
+        "Cólon direito",
 
-    "convencional": "Convencional",
-    "laparoscopica": "Laparoscópica",
+    "colon_esquerdo":
+        "Cólon esquerdo",
+
+    "reto_inferior":
+        "Reto inferior",
+
+    "reto_medio":
+        "Reto médio",
+
+    "retossigmoide":
+        "Retossigmoide",
+
+    "sincronico":
+        "Sincrônico",
+
+    "convencional":
+        "Convencional",
+
+    "laparoscopica":
+        "Laparoscópica",
 }
 
 
-def formatar_categoria(valor):
+def formatar_categoria(
+    valor
+):
 
-    texto = str(valor)
+    if valor is None:
+        return ""
+
+    texto = str(
+        valor
+    )
 
     if texto in mapa_exibicao:
-        return mapa_exibicao[texto]
+
+        return mapa_exibicao[
+            texto
+        ]
 
     return (
         texto
-        .replace("_", " ")
+        .replace(
+            "_",
+            " ",
+        )
         .capitalize()
     )
 
@@ -242,24 +362,53 @@ def formatar_categoria(valor):
 valores = {}
 
 
-def criar_campo(feature):
+def criar_campo(
+    feature
+):
 
-    meta = schema.get(feature, {})
+    meta = schema.get(
+        feature,
+        {},
+    )
+
     label = meta.get(
         "label",
         feature,
     )
 
-    if feature == "tempo_int_cir_dias":
+
+    # -----------------------------------------------------
+    # TEMPO ENTRE INTERNAÇÃO E CIRURGIA
+    # É DERIVADO DAS DATAS
+    # -----------------------------------------------------
+
+    if (
+        feature
+        == "tempo_int_cir_dias"
+    ):
+
         return
 
-    if meta.get("type") == "numeric":
 
-        min_v = meta.get("min")
-        max_v = meta.get("max")
-        median_v = meta.get("median")
+    # -----------------------------------------------------
+    # VARIÁVEL NUMÉRICA
+    # -----------------------------------------------------
+
+    if (
+        meta.get("type")
+        == "numeric"
+    ):
+
+        min_v = meta.get(
+            "min"
+        )
+
+        max_v = meta.get(
+            "max"
+        )
 
         help_txt = None
+
 
         if (
             min_v is not None
@@ -267,69 +416,133 @@ def criar_campo(feature):
         ):
 
             help_txt = (
-                "Faixa observada no banco de desenvolvimento: "
+                "Faixa observada no banco "
+                "de desenvolvimento: "
                 f"{int(round(min_v))} a "
                 f"{int(round(max_v))}."
             )
 
-        default = (
-            0
-            if median_v is None
-            else int(round(median_v))
-        )
 
-        valores[feature] = st.number_input(
+        valores[
+            feature
+        ] = st.number_input(
+
             label,
+
             min_value=(
-                int(round(min_v))
-                if min_v is not None
+                int(
+                    round(min_v)
+                )
+                if min_v
+                is not None
                 else None
             ),
+
             max_value=(
-                int(round(max_v))
-                if max_v is not None
+                int(
+                    round(max_v)
+                )
+                if max_v
+                is not None
                 else None
             ),
-            value=default,
+
+            value=None,
+
             step=1,
+
             format="%d",
+
+            placeholder=(
+                "Informe o valor"
+            ),
+
             help=help_txt,
-            key=f"pred_{feature}",
+
+            key=(
+                f"pred_{feature}"
+            ),
         )
 
-    elif meta.get("type") == "categorical":
+
+    # -----------------------------------------------------
+    # VARIÁVEL CATEGÓRICA
+    # -----------------------------------------------------
+
+    elif (
+        meta.get("type")
+        == "categorical"
+    ):
 
         options = meta.get(
             "options",
             [],
         )
 
+
         if options:
 
-            valores[feature] = st.selectbox(
+            valores[
+                feature
+            ] = st.selectbox(
+
                 label,
+
                 options=options,
-                format_func=formatar_categoria,
-                key=f"pred_{feature}",
+
+                index=None,
+
+                placeholder=(
+                    "Selecione uma opção"
+                ),
+
+                format_func=(
+                    formatar_categoria
+                ),
+
+                key=(
+                    f"pred_{feature}"
+                ),
             )
 
         else:
 
-            valores[feature] = st.text_input(
+            valores[
+                feature
+            ] = st.text_input(
+
                 label,
-                key=f"pred_{feature}",
+
+                value="",
+
+                key=(
+                    f"pred_{feature}"
+                ),
             )
+
+
+    # -----------------------------------------------------
+    # FALLBACK
+    # -----------------------------------------------------
 
     else:
 
-        valores[feature] = st.text_input(
+        valores[
+            feature
+        ] = st.text_input(
+
             label,
-            key=f"pred_{feature}",
+
+            value="",
+
+            key=(
+                f"pred_{feature}"
+            ),
         )
 
 
 # =========================================================
-# AUDITORIA
+# FUNÇÃO DE AUDITORIA
 # =========================================================
 
 def calcular_auditoria(
@@ -338,39 +551,71 @@ def calcular_auditoria(
 ):
 
     if dias_reais > 7:
-        desfecho_real = "Prolongada"
+
+        desfecho_real = (
+            "Prolongada"
+        )
 
     else:
-        desfecho_real = "Não prolongada"
+
+        desfecho_real = (
+            "Não prolongada"
+        )
+
 
     if (
-        classificacao_prevista == "Alto risco"
-        and desfecho_real == "Prolongada"
+        classificacao_prevista
+        == "Alto risco"
+        and
+        desfecho_real
+        == "Prolongada"
     ):
 
         tipo_resultado = "VP"
-        predicao = "Modelo acertou"
+
+        predicao = (
+            "Modelo acertou"
+        )
+
 
     elif (
-        classificacao_prevista == "Baixo risco"
-        and desfecho_real == "Não prolongada"
+        classificacao_prevista
+        == "Baixo risco"
+        and
+        desfecho_real
+        == "Não prolongada"
     ):
 
         tipo_resultado = "VN"
-        predicao = "Modelo acertou"
+
+        predicao = (
+            "Modelo acertou"
+        )
+
 
     elif (
-        classificacao_prevista == "Alto risco"
-        and desfecho_real == "Não prolongada"
+        classificacao_prevista
+        == "Alto risco"
+        and
+        desfecho_real
+        == "Não prolongada"
     ):
 
         tipo_resultado = "FP"
-        predicao = "Modelo errou"
+
+        predicao = (
+            "Modelo errou"
+        )
+
 
     else:
 
         tipo_resultado = "FN"
-        predicao = "Modelo errou"
+
+        predicao = (
+            "Modelo errou"
+        )
+
 
     return (
         desfecho_real,
@@ -386,22 +631,26 @@ def calcular_auditoria(
 st.markdown(
     """
     <div class="app-header">
+
         <div class="app-header-title">
             🏥 Predição de Internação Prolongada — CCR
         </div>
+
         <div class="app-header-subtitle">
             Apoio à decisão no pós-operatório de pacientes
             submetidos à cirurgia por câncer colorretal
         </div>
+
     </div>
     """,
     unsafe_allow_html=True,
 )
 
+
 st.caption(
     "Protótipo em desenvolvimento. "
-    "A interpretação deve considerar o desempenho e "
-    "as limitações do modelo."
+    "A interpretação deve considerar "
+    "o desempenho e as limitações do modelo."
 )
 
 
@@ -414,25 +663,34 @@ st.sidebar.markdown(
 )
 
 st.sidebar.write(
-    f"**Algoritmo:** {family}"
+    f"**Algoritmo:** "
+    f"{family}"
 )
 
 st.sidebar.write(
-    "**Desfecho:** Internação > 7 dias"
+    "**Desfecho:** "
+    "Internação > 7 dias"
 )
 
 st.sidebar.write(
-    f"**Threshold:** {threshold:.0%}"
+    f"**Threshold:** "
+    f"{threshold:.0%}"
 )
 
-if sensibilidade_meta is not None:
+
+if (
+    sensibilidade_meta
+    is not None
+):
 
     st.sidebar.write(
         f"**Meta de sensibilidade:** "
         f"{sensibilidade_meta:.0%}"
     )
 
+
 st.sidebar.divider()
+
 
 st.sidebar.warning(
     "Ferramenta de apoio à decisão. "
@@ -453,201 +711,413 @@ aba_predicao, aba_auditoria = st.tabs(
 
 
 # =========================================================
-# ABA PREDIÇÃO
+# ABA 1 — NOVA PREDIÇÃO
 # =========================================================
 
 with aba_predicao:
+
+
+    # -----------------------------------------------------
+    # NOVO CADASTRO
+    # -----------------------------------------------------
+
+    col_titulo, col_novo = (
+        st.columns(
+            [4, 1]
+        )
+    )
+
+
+    with col_titulo:
+
+        st.markdown(
+            "### Cadastro para predição"
+        )
+
+
+    with col_novo:
+
+        if st.button(
+            "➕ Novo cadastro",
+            use_container_width=True,
+        ):
+
+            limpar_novo_cadastro()
+
+            st.rerun()
+
 
     # -----------------------------------------------------
     # IDENTIFICAÇÃO
     # -----------------------------------------------------
 
-    with st.container(border=True):
+    with st.container(
+        border=True
+    ):
 
         st.markdown(
             "### 🪪 Identificação do paciente"
         )
 
-        col1, col2, col3 = st.columns(3)
+
+        col1, col2, col3 = (
+            st.columns(3)
+        )
+
 
         with col1:
 
             prontuario = st.text_input(
+
                 "Prontuário",
-                placeholder="Digite o prontuário",
+
+                value="",
+
+                placeholder=(
+                    "Digite o prontuário"
+                ),
+
+                key="prontuario",
             )
+
 
         with col2:
 
-            data_internacao = st.date_input(
-                "Data da internação",
-                format="DD/MM/YYYY",
+            data_internacao = (
+                st.date_input(
+
+                    "Data da internação",
+
+                    value=None,
+
+                    format=(
+                        "DD/MM/YYYY"
+                    ),
+
+                    key=(
+                        "data_internacao"
+                    ),
+                )
             )
+
 
         with col3:
 
-            data_cirurgia = st.date_input(
-                "Data da cirurgia",
-                format="DD/MM/YYYY",
+            data_cirurgia = (
+                st.date_input(
+
+                    "Data da cirurgia",
+
+                    value=None,
+
+                    format=(
+                        "DD/MM/YYYY"
+                    ),
+
+                    key=(
+                        "data_cirurgia"
+                    ),
+                )
             )
 
-        if data_cirurgia >= data_internacao:
 
-            tempo_int_cir_dias = (
+        # -------------------------------------------------
+        # TEMPO ENTRE INTERNAÇÃO E CIRURGIA
+        # -------------------------------------------------
+
+        tempo_int_cir_dias = None
+
+
+        if (
+            data_internacao
+            is not None
+            and
+            data_cirurgia
+            is not None
+        ):
+
+
+            if (
                 data_cirurgia
-                - data_internacao
-            ).days
+                >= data_internacao
+            ):
 
-            valores[
-                "tempo_int_cir_dias"
-            ] = tempo_int_cir_dias
+                tempo_int_cir_dias = (
 
-            st.markdown(
-                f"""
-                <div class="derived-value">
-                    ⏱ Intervalo internação → cirurgia:
-                    {tempo_int_cir_dias}
-                    {"dia" if tempo_int_cir_dias == 1 else "dias"}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                    data_cirurgia
+                    - data_internacao
 
-        else:
-
-            tempo_int_cir_dias = None
-
-            st.error(
-                "A data da cirurgia não pode ser "
-                "anterior à data da internação."
-            )
+                ).days
 
 
-    # -----------------------------------------------------
-    # BLOCOS CLÍNICOS
-    # -----------------------------------------------------
+                valores[
+                    "tempo_int_cir_dias"
+                ] = (
+                    tempo_int_cir_dias
+                )
+
+
+                st.markdown(
+                    f"""
+                    <div class="derived-value">
+
+                        ⏱ Intervalo internação → cirurgia:
+                        {tempo_int_cir_dias}
+                        {"dia" if tempo_int_cir_dias == 1 else "dias"}
+
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
+            else:
+
+                st.error(
+                    "A data da cirurgia "
+                    "não pode ser anterior "
+                    "à data da internação."
+                )
+
+
+    # =====================================================
+    # DADOS PARA PREDIÇÃO
+    # =====================================================
 
     st.markdown(
         "## Dados para predição"
     )
 
-    linha1_col1, linha1_col2 = st.columns(2)
+
+    linha1_col1, linha1_col2 = (
+        st.columns(2)
+    )
+
+
+    # -----------------------------------------------------
+    # DADOS DO PACIENTE
+    # -----------------------------------------------------
 
     with linha1_col1:
 
-        with st.container(border=True):
+        with st.container(
+            border=True
+        ):
 
             st.markdown(
                 "### 👤 Dados do paciente"
             )
 
-            if "sexo_int" in predictors:
+
+            if (
+                "sexo_int"
+                in predictors
+            ):
+
                 criar_campo(
                     "sexo_int"
                 )
 
-            if "f_idade_anos_int" in predictors:
+
+            if (
+                "f_idade_anos_int"
+                in predictors
+            ):
+
                 criar_campo(
                     "f_idade_anos_int"
                 )
 
-            if "idade_anos_diag" in predictors:
+
+            if (
+                "idade_anos_diag"
+                in predictors
+            ):
+
                 criar_campo(
                     "idade_anos_diag"
                 )
 
-            if "f_asa" in predictors:
+
+            if (
+                "f_asa"
+                in predictors
+            ):
+
                 criar_campo(
                     "f_asa"
                 )
 
 
+    # -----------------------------------------------------
+    # DADOS ONCOLÓGICOS
+    # -----------------------------------------------------
+
     with linha1_col2:
 
-        with st.container(border=True):
+        with st.container(
+            border=True
+        ):
 
             st.markdown(
                 "### 🩺 Dados oncológicos"
             )
 
-            if "f_localizacao" in predictors:
+
+            if (
+                "f_localizacao"
+                in predictors
+            ):
+
                 criar_campo(
                     "f_localizacao"
                 )
 
-            if "f_estagio" in predictors:
+
+            if (
+                "f_estagio"
+                in predictors
+            ):
+
                 criar_campo(
                     "f_estagio"
                 )
 
-            if "f_neoadjuvancia" in predictors:
+
+            if (
+                "f_neoadjuvancia"
+                in predictors
+            ):
+
                 criar_campo(
                     "f_neoadjuvancia"
                 )
 
 
-    linha2_col1, linha2_col2 = st.columns(2)
+    linha2_col1, linha2_col2 = (
+        st.columns(2)
+    )
+
+
+    # -----------------------------------------------------
+    # PROCEDIMENTO CIRÚRGICO
+    # -----------------------------------------------------
 
     with linha2_col1:
 
-        with st.container(border=True):
+        with st.container(
+            border=True
+        ):
 
             st.markdown(
                 "### 🏥 Procedimento cirúrgico"
             )
 
-            if "f_abord_cirurgica" in predictors:
+
+            if (
+                "f_abord_cirurgica"
+                in predictors
+            ):
+
                 criar_campo(
                     "f_abord_cirurgica"
                 )
 
-            if "tempo_cir_min2" in predictors:
+
+            if (
+                "tempo_cir_min2"
+                in predictors
+            ):
+
                 criar_campo(
                     "tempo_cir_min2"
                 )
 
-            if "num_orgaos_envolvidos" in predictors:
+
+            if (
+                "num_orgaos_envolvidos"
+                in predictors
+            ):
+
                 criar_campo(
                     "num_orgaos_envolvidos"
                 )
 
 
+    # -----------------------------------------------------
+    # INTERNAÇÃO E CUIDADOS
+    # -----------------------------------------------------
+
     with linha2_col2:
 
-        with st.container(border=True):
+        with st.container(
+            border=True
+        ):
 
             st.markdown(
                 "### 🛏️ Internação e cuidados"
             )
 
-            if "uti" in predictors:
+
+            if (
+                "uti"
+                in predictors
+            ):
+
                 criar_campo(
                     "uti"
                 )
 
-            if "urgencia" in predictors:
+
+            if (
+                "urgencia"
+                in predictors
+            ):
+
                 criar_campo(
                     "urgencia"
                 )
 
-            if tempo_int_cir_dias is not None:
+
+            if (
+                tempo_int_cir_dias
+                is not None
+            ):
 
                 st.metric(
                     "Intervalo internação → cirurgia",
                     f"{tempo_int_cir_dias} dias",
                 )
 
+            else:
 
-    # -----------------------------------------------------
-    # PREDITORES NÃO MAPEADOS
-    # -----------------------------------------------------
+                st.caption(
+                    "O intervalo internação → cirurgia "
+                    "será calculado após o preenchimento "
+                    "das duas datas."
+                )
+
+
+    # =====================================================
+    # PREDITORES EVENTUALMENTE NÃO MAPEADOS
+    # =====================================================
 
     faltantes = [
+
         feature
-        for feature in predictors
-        if feature not in valores
-        and feature != "tempo_int_cir_dias"
+
+        for feature
+        in predictors
+
+        if (
+            feature
+            not in valores
+            and
+            feature
+            != "tempo_int_cir_dias"
+        )
     ]
+
 
     if faltantes:
 
@@ -656,52 +1126,104 @@ with aba_predicao:
         ):
 
             for feature in faltantes:
-                criar_campo(feature)
+
+                criar_campo(
+                    feature
+                )
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # BOTÃO DE PREDIÇÃO
-    # -----------------------------------------------------
+    # =====================================================
 
     st.write("")
 
+
     calcular = st.button(
+
         "🧠 Calcular risco de internação prolongada",
+
         type="primary",
+
         use_container_width=True,
     )
 
 
+    # =====================================================
+    # EXECUÇÃO DA PREDIÇÃO
+    # =====================================================
+
     if calcular:
+
+
+        # -------------------------------------------------
+        # VALIDAÇÕES DE IDENTIFICAÇÃO
+        # -------------------------------------------------
 
         if not prontuario.strip():
 
             st.warning(
-                "Informe o prontuário antes de calcular."
+                "Informe o prontuário."
             )
 
             st.stop()
 
 
-        if data_cirurgia < data_internacao:
+        if (
+            data_internacao
+            is None
+        ):
+
+            st.warning(
+                "Informe a data da internação."
+            )
+
+            st.stop()
+
+
+        if (
+            data_cirurgia
+            is None
+        ):
+
+            st.warning(
+                "Informe a data da cirurgia."
+            )
+
+            st.stop()
+
+
+        if (
+            data_cirurgia
+            < data_internacao
+        ):
 
             st.error(
-                "A data da cirurgia não pode ser "
-                "anterior à data da internação."
+                "A data da cirurgia "
+                "não pode ser anterior "
+                "à data da internação."
             )
 
             st.stop()
 
 
-        if tempo_int_cir_dias is None:
+        if (
+            tempo_int_cir_dias
+            is None
+        ):
 
             st.error(
-                "Não foi possível calcular o intervalo "
-                "entre internação e cirurgia."
+                "Não foi possível calcular "
+                "o intervalo entre internação "
+                "e cirurgia."
             )
 
             st.stop()
 
+
+        # -------------------------------------------------
+        # GARANTE VARIÁVEL DERIVADA
+        # -------------------------------------------------
 
         valores[
             "tempo_int_cir_dias"
@@ -710,29 +1232,117 @@ with aba_predicao:
         )
 
 
-        novo_paciente = pd.DataFrame(
-            [valores],
-            columns=predictors,
+        # -------------------------------------------------
+        # VERIFICA TODOS OS PREDITORES
+        # -------------------------------------------------
+
+        campos_faltantes = []
+
+
+        for feature in predictors:
+
+            valor = valores.get(
+                feature
+            )
+
+
+            if (
+                valor is None
+                or
+                (
+                    isinstance(
+                        valor,
+                        str,
+                    )
+                    and
+                    not valor.strip()
+                )
+            ):
+
+                label = (
+                    schema
+                    .get(
+                        feature,
+                        {},
+                    )
+                    .get(
+                        "label",
+                        feature,
+                    )
+                )
+
+                campos_faltantes.append(
+                    label
+                )
+
+
+        if campos_faltantes:
+
+            st.error(
+                "Preencha todos os campos "
+                "antes de calcular a predição."
+            )
+
+
+            st.write(
+                "**Campos pendentes:**"
+            )
+
+
+            for campo in campos_faltantes:
+
+                st.write(
+                    f"- {campo}"
+                )
+
+
+            st.stop()
+
+
+        # -------------------------------------------------
+        # DATAFRAME DO MODELO
+        # -------------------------------------------------
+
+        novo_paciente = (
+            pd.DataFrame(
+                [valores],
+                columns=predictors,
+            )
         )
 
+
+        # -------------------------------------------------
+        # PREDIÇÃO
+        # -------------------------------------------------
 
         try:
 
             prob = float(
+
                 model.predict_proba(
                     novo_paciente
                 )[0, 1]
+
             )
+
 
         except Exception as exc:
 
             st.error(
-                "Não foi possível calcular a predição."
+                "Não foi possível calcular "
+                "a predição."
             )
 
-            st.exception(exc)
+            st.exception(
+                exc
+            )
+
             st.stop()
 
+
+        # -------------------------------------------------
+        # CLASSIFICAÇÃO
+        # -------------------------------------------------
 
         if prob >= threshold:
 
@@ -747,10 +1357,18 @@ with aba_predicao:
             )
 
 
+        # -------------------------------------------------
+        # ID DA PREDIÇÃO
+        # -------------------------------------------------
+
         id_predicao = str(
             uuid4()
         )
 
+
+        # -------------------------------------------------
+        # REGISTRO
+        # -------------------------------------------------
 
         registro = {
 
@@ -770,15 +1388,23 @@ with aba_predicao:
                 prob,
 
             "threshold":
-                float(threshold),
+                float(
+                    threshold
+                ),
 
             "classificacao_prevista":
                 classificacao_prevista,
 
             "modelo":
-                str(family),
+                str(
+                    family
+                ),
         }
 
+
+        # -------------------------------------------------
+        # ADICIONA PREDITORES
+        # -------------------------------------------------
 
         for feature in predictors:
 
@@ -791,33 +1417,45 @@ with aba_predicao:
                 {},
             )
 
+
             if (
                 meta.get("type")
                 == "numeric"
             ):
 
-                registro[feature] = (
-                    int(valor)
-                    if valor is not None
-                    else None
+                registro[
+                    feature
+                ] = int(
+                    valor
                 )
+
 
             else:
 
-                registro[feature] = (
-                    str(valor)
-                    if valor is not None
-                    else None
+                registro[
+                    feature
+                ] = str(
+                    valor
                 )
 
 
+        # -------------------------------------------------
+        # SALVA NO SUPABASE
+        # -------------------------------------------------
+
         try:
 
-            supabase.table(
-                "auditoria_predicoes"
-            ).insert(
-                registro
-            ).execute()
+            (
+                supabase
+                .table(
+                    "auditoria_predicoes"
+                )
+                .insert(
+                    registro
+                )
+                .execute()
+            )
+
 
         except Exception as exc:
 
@@ -827,57 +1465,77 @@ with aba_predicao:
                 "no banco de auditoria."
             )
 
-            st.exception(exc)
+            st.exception(
+                exc
+            )
+
             st.stop()
 
 
-        # -------------------------------------------------
+        # =================================================
         # RESULTADO
-        # -------------------------------------------------
+        # =================================================
 
         st.markdown(
             "## Resultado da predição"
         )
 
-        if classificacao_prevista == "Alto risco":
+
+        if (
+            classificacao_prevista
+            == "Alto risco"
+        ):
 
             st.markdown(
                 f"""
                 <div class="result-high">
+
                     <div class="small-label">
                         Probabilidade estimada de internação &gt; 7 dias
                     </div>
+
                     <div class="result-prob">
                         {prob:.1%}
                     </div>
+
                     <div class="result-title">
                         🔴 ALTO RISCO
                     </div>
+
                     <div>
-                        Threshold operacional: {threshold:.0%}
+                        Threshold operacional:
+                        {threshold:.0%}
                     </div>
+
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+
 
         else:
 
             st.markdown(
                 f"""
                 <div class="result-low">
+
                     <div class="small-label">
                         Probabilidade estimada de internação &gt; 7 dias
                     </div>
+
                     <div class="result-prob">
                         {prob:.1%}
                     </div>
+
                     <div class="result-title">
                         🟢 BAIXO RISCO
                     </div>
+
                     <div>
-                        Threshold operacional: {threshold:.0%}
+                        Threshold operacional:
+                        {threshold:.0%}
                     </div>
+
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -886,14 +1544,18 @@ with aba_predicao:
 
         st.progress(
             min(
-                max(prob, 0.0),
+                max(
+                    prob,
+                    0.0,
+                ),
                 1.0,
             )
         )
 
 
         st.success(
-            "Predição registrada no banco de auditoria."
+            "Predição registrada "
+            "no banco de auditoria."
         )
 
 
@@ -902,7 +1564,8 @@ with aba_predicao:
         ):
 
             st.write(
-                f"**Prontuário:** {prontuario}"
+                f"**Prontuário:** "
+                f"{prontuario}"
             )
 
             st.write(
@@ -930,10 +1593,11 @@ with aba_predicao:
 
 
 # =========================================================
-# ABA AUDITORIA
+# ABA 2 — AUDITORIA
 # =========================================================
 
 with aba_auditoria:
+
 
     st.markdown(
         """
@@ -944,19 +1608,37 @@ with aba_auditoria:
         unsafe_allow_html=True,
     )
 
-    with st.container(border=True):
 
-        col_busca, col_botao = st.columns(
-            [3, 1]
+    with st.container(
+        border=True
+    ):
+
+        col_busca, col_botao = (
+            st.columns(
+                [3, 1]
+            )
         )
+
 
         with col_busca:
 
-            prontuario_busca = st.text_input(
-                "Prontuário",
-                key="auditoria_prontuario",
-                placeholder="Digite o prontuário",
+            prontuario_busca = (
+                st.text_input(
+
+                    "Prontuário",
+
+                    value="",
+
+                    key=(
+                        "auditoria_prontuario"
+                    ),
+
+                    placeholder=(
+                        "Digite o prontuário"
+                    ),
+                )
             )
+
 
         with col_botao:
 
@@ -964,13 +1646,30 @@ with aba_auditoria:
             st.write("")
 
             buscar = st.button(
+
                 "🔍 Buscar",
-                key="buscar_predicao",
+
+                key=(
+                    "buscar_predicao"
+                ),
+
                 use_container_width=True,
             )
 
 
+    # =====================================================
+    # BUSCA
+    # =====================================================
+
     if buscar:
+
+
+        # Remove resultado antigo antes de nova busca
+        st.session_state.pop(
+            "registro_auditoria",
+            None,
+        )
+
 
         if not prontuario_busca.strip():
 
@@ -978,32 +1677,44 @@ with aba_auditoria:
                 "Informe o prontuário."
             )
 
+
         else:
 
             try:
 
                 resposta = (
+
                     supabase
+
                     .table(
                         "auditoria_predicoes"
                     )
+
                     .select("*")
+
                     .eq(
                         "prontuario",
                         prontuario_busca.strip(),
                     )
+
                     .order(
                         "data_predicao",
                         desc=True,
                     )
+
                     .execute()
                 )
 
+
                 registros = (
+
                     resposta.data
+
                     if resposta.data
+
                     else []
                 )
+
 
                 if not registros:
 
@@ -1012,11 +1723,13 @@ with aba_auditoria:
                         "para este prontuário."
                     )
 
+
                 else:
 
                     st.session_state[
                         "registro_auditoria"
                     ] = registros[0]
+
 
             except Exception as exc:
 
@@ -1025,8 +1738,14 @@ with aba_auditoria:
                     "o banco de auditoria."
                 )
 
-                st.exception(exc)
+                st.exception(
+                    exc
+                )
 
+
+    # =====================================================
+    # REGISTRO LOCALIZADO
+    # =====================================================
 
     registro_auditoria = (
         st.session_state.get(
@@ -1037,6 +1756,7 @@ with aba_auditoria:
 
     if registro_auditoria:
 
+
         st.markdown(
             """
             <div class="audit-step">
@@ -1046,11 +1766,19 @@ with aba_auditoria:
             unsafe_allow_html=True,
         )
 
-        with st.container(border=True):
+
+        with st.container(
+            border=True
+        ):
+
 
             data_cirurgia_registro = None
 
-            col1, col2 = st.columns(2)
+
+            col1, col2 = (
+                st.columns(2)
+            )
+
 
             with col1:
 
@@ -1059,14 +1787,19 @@ with aba_auditoria:
                     f"{registro_auditoria.get('prontuario', '')}"
                 )
 
-                if registro_auditoria.get(
-                    "data_internacao"
+
+                if (
+                    registro_auditoria.get(
+                        "data_internacao"
+                    )
                 ):
 
-                    data_int = pd.to_datetime(
-                        registro_auditoria[
-                            "data_internacao"
-                        ]
+                    data_int = (
+                        pd.to_datetime(
+                            registro_auditoria[
+                                "data_internacao"
+                            ]
+                        )
                     )
 
                     st.write(
@@ -1075,17 +1808,22 @@ with aba_auditoria:
                     )
 
 
-                if registro_auditoria.get(
-                    "data_cirurgia"
+                if (
+                    registro_auditoria.get(
+                        "data_cirurgia"
+                    )
                 ):
 
                     data_cirurgia_registro = (
+
                         pd.to_datetime(
                             registro_auditoria[
                                 "data_cirurgia"
                             ]
-                        ).date()
+                        )
+                        .date()
                     )
+
 
                     st.write(
                         f"**Cirurgia:** "
@@ -1095,7 +1833,10 @@ with aba_auditoria:
 
             with col2:
 
-                met1, met2 = st.columns(2)
+                met1, met2 = (
+                    st.columns(2)
+                )
+
 
                 with met1:
 
@@ -1103,6 +1844,7 @@ with aba_auditoria:
                         "Probabilidade",
                         f"{float(registro_auditoria['probabilidade']):.1%}",
                     )
+
 
                 with met2:
 
@@ -1114,9 +1856,16 @@ with aba_auditoria:
                     )
 
 
-        if registro_auditoria.get(
-            "desfecho_real"
+        # =================================================
+        # CASO JÁ AUDITADO
+        # =================================================
+
+        if (
+            registro_auditoria.get(
+                "desfecho_real"
+            )
         ):
+
 
             st.markdown(
                 """
@@ -1127,19 +1876,28 @@ with aba_auditoria:
                 unsafe_allow_html=True,
             )
 
-            with st.container(border=True):
 
-                if registro_auditoria.get(
-                    "data_alta"
+            with st.container(
+                border=True
+            ):
+
+
+                if (
+                    registro_auditoria.get(
+                        "data_alta"
+                    )
                 ):
 
                     data_alta_registro = (
+
                         pd.to_datetime(
                             registro_auditoria[
                                 "data_alta"
                             ]
-                        ).date()
+                        )
+                        .date()
                     )
+
 
                     st.write(
                         f"**Data da alta:** "
@@ -1147,7 +1905,23 @@ with aba_auditoria:
                     )
 
 
-                col1, col2, col3 = st.columns(3)
+                if (
+                    registro_auditoria.get(
+                        "dias_reais_internacao"
+                    )
+                    is not None
+                ):
+
+                    st.write(
+                        f"**Cirurgia → alta:** "
+                        f"{registro_auditoria['dias_reais_internacao']} dias"
+                    )
+
+
+                col1, col2, col3 = (
+                    st.columns(3)
+                )
+
 
                 with col1:
 
@@ -1158,6 +1932,7 @@ with aba_auditoria:
                         ],
                     )
 
+
                 with col2:
 
                     st.metric(
@@ -1166,6 +1941,7 @@ with aba_auditoria:
                             "tipo_resultado"
                         ],
                     )
+
 
                 with col3:
 
@@ -1185,17 +1961,25 @@ with aba_auditoria:
                 ):
 
                     st.success(
-                        "✅ Modelo acertou a classificação."
+                        "✅ Modelo acertou "
+                        "a classificação."
                     )
+
 
                 else:
 
                     st.error(
-                        "❌ Modelo errou a classificação."
+                        "❌ Modelo errou "
+                        "a classificação."
                     )
 
 
+        # =================================================
+        # REGISTRAR ALTA
+        # =================================================
+
         else:
+
 
             st.markdown(
                 """
@@ -1206,9 +1990,16 @@ with aba_auditoria:
                 unsafe_allow_html=True,
             )
 
-            with st.container(border=True):
 
-                if data_cirurgia_registro is None:
+            with st.container(
+                border=True
+            ):
+
+
+                if (
+                    data_cirurgia_registro
+                    is None
+                ):
 
                     st.error(
                         "Este registro não possui "
@@ -1218,178 +2009,229 @@ with aba_auditoria:
                     st.stop()
 
 
-                data_alta = st.date_input(
-                    "Data da alta",
-                    value=data_cirurgia_registro,
-                    min_value=data_cirurgia_registro,
-                    format="DD/MM/YYYY",
-                    key="auditoria_data_alta",
+                data_alta = (
+                    st.date_input(
+
+                        "Data da alta",
+
+                        value=None,
+
+                        min_value=(
+                            data_cirurgia_registro
+                        ),
+
+                        format=(
+                            "DD/MM/YYYY"
+                        ),
+
+                        key=(
+                            "auditoria_data_alta"
+                        ),
+                    )
                 )
 
 
-                dias_reais = (
+                if (
                     data_alta
-                    - data_cirurgia_registro
-                ).days
+                    is not None
+                ):
 
 
-                col1, col2 = st.columns(2)
+                    dias_reais = (
 
-                with col1:
+                        data_alta
+                        - data_cirurgia_registro
 
-                    st.metric(
-                        "Cirurgia → alta",
-                        f"{dias_reais} dias",
-                    )
-
-                with col2:
-
-                    if dias_reais > 7:
-
-                        st.metric(
-                            "Desfecho calculado",
-                            "Prolongada",
-                        )
-
-                    else:
-
-                        st.metric(
-                            "Desfecho calculado",
-                            "Não prolongada",
-                        )
+                    ).days
 
 
-                salvar_desfecho = st.button(
-                    "✅ Registrar alta e auditar modelo",
-                    type="primary",
-                    use_container_width=True,
-                )
-
-
-                if salvar_desfecho:
-
-                    (
-                        desfecho_real,
-                        tipo_resultado,
-                        resultado_predicao,
-                    ) = calcular_auditoria(
-                        registro_auditoria[
-                            "classificacao_prevista"
-                        ],
-                        int(dias_reais),
+                    col1, col2 = (
+                        st.columns(2)
                     )
 
 
-                    atualizacao = {
+                    with col1:
 
-                        "data_alta":
-                            data_alta.isoformat(),
-
-                        "dias_reais_internacao":
-                            int(dias_reais),
-
-                        "desfecho_real":
-                            desfecho_real,
-
-                        "tipo_resultado":
-                            tipo_resultado,
-
-                        "predicao":
-                            resultado_predicao,
-
-                        "data_registro_desfecho":
-                            datetime.now(
-                                timezone.utc
-                            ).isoformat(),
-                    }
-
-
-                    try:
-
-                        (
-                            supabase
-                            .table(
-                                "auditoria_predicoes"
-                            )
-                            .update(
-                                atualizacao
-                            )
-                            .eq(
-                                "id_predicao",
-                                registro_auditoria[
-                                    "id_predicao"
-                                ],
-                            )
-                            .execute()
+                        st.metric(
+                            "Cirurgia → alta",
+                            f"{dias_reais} dias",
                         )
 
 
-                        st.markdown(
-                            "### Resultado da auditoria"
-                        )
+                    with col2:
 
-
-                        col1, col2, col3 = (
-                            st.columns(3)
-                        )
-
-
-                        with col1:
+                        if dias_reais > 7:
 
                             st.metric(
-                                "Desfecho",
-                                desfecho_real,
-                            )
-
-
-                        with col2:
-
-                            st.metric(
-                                "Tipo",
-                                tipo_resultado,
-                            )
-
-
-                        with col3:
-
-                            st.metric(
-                                "Predição",
-                                resultado_predicao,
-                            )
-
-
-                        if (
-                            resultado_predicao
-                            == "Modelo acertou"
-                        ):
-
-                            st.success(
-                                "✅ Modelo acertou "
-                                "a classificação deste caso."
+                                "Desfecho calculado",
+                                "Prolongada",
                             )
 
                         else:
 
-                            st.error(
-                                "❌ Modelo errou "
-                                "a classificação deste caso."
+                            st.metric(
+                                "Desfecho calculado",
+                                "Não prolongada",
                             )
 
 
-                        st.session_state.pop(
-                            "registro_auditoria",
-                            None,
+                    salvar_desfecho = (
+                        st.button(
+
+                            "✅ Registrar alta e auditar modelo",
+
+                            type="primary",
+
+                            use_container_width=True,
+                        )
+                    )
+
+
+                    if salvar_desfecho:
+
+
+                        (
+                            desfecho_real,
+                            tipo_resultado,
+                            resultado_predicao,
+
+                        ) = calcular_auditoria(
+
+                            registro_auditoria[
+                                "classificacao_prevista"
+                            ],
+
+                            int(
+                                dias_reais
+                            ),
                         )
 
 
-                    except Exception as exc:
+                        atualizacao = {
 
-                        st.error(
-                            "Não foi possível atualizar "
-                            "o registro."
-                        )
+                            "data_alta":
+                                data_alta.isoformat(),
 
-                        st.exception(exc)
+                            "dias_reais_internacao":
+                                int(dias_reais),
+
+                            "desfecho_real":
+                                desfecho_real,
+
+                            "tipo_resultado":
+                                tipo_resultado,
+
+                            "predicao":
+                                resultado_predicao,
+
+                            "data_registro_desfecho":
+                                datetime.now(
+                                    timezone.utc
+                                ).isoformat(),
+                        }
+
+
+                        try:
+
+                            (
+                                supabase
+
+                                .table(
+                                    "auditoria_predicoes"
+                                )
+
+                                .update(
+                                    atualizacao
+                                )
+
+                                .eq(
+                                    "id_predicao",
+                                    registro_auditoria[
+                                        "id_predicao"
+                                    ],
+                                )
+
+                                .execute()
+                            )
+
+
+                            st.markdown(
+                                "### Resultado da auditoria"
+                            )
+
+
+                            col1, col2, col3 = (
+                                st.columns(3)
+                            )
+
+
+                            with col1:
+
+                                st.metric(
+                                    "Desfecho",
+                                    desfecho_real,
+                                )
+
+
+                            with col2:
+
+                                st.metric(
+                                    "Tipo",
+                                    tipo_resultado,
+                                )
+
+
+                            with col3:
+
+                                st.metric(
+                                    "Predição",
+                                    resultado_predicao,
+                                )
+
+
+                            if (
+                                resultado_predicao
+                                == "Modelo acertou"
+                            ):
+
+                                st.success(
+                                    "✅ Modelo acertou "
+                                    "a classificação deste caso."
+                                )
+
+
+                            else:
+
+                                st.error(
+                                    "❌ Modelo errou "
+                                    "a classificação deste caso."
+                                )
+
+
+                            st.session_state.pop(
+                                "registro_auditoria",
+                                None,
+                            )
+
+
+                        except Exception as exc:
+
+                            st.error(
+                                "Não foi possível atualizar "
+                                "o registro."
+                            )
+
+                            st.exception(
+                                exc
+                            )
+
+
+                else:
+
+                    st.caption(
+                        "Informe a data da alta "
+                        "para realizar a auditoria."
+                    )
 
 
 # =========================================================
@@ -1398,23 +2240,27 @@ with aba_auditoria:
 
 st.divider()
 
+
 with st.expander(
     "ℹ️ Informações metodológicas"
 ):
 
     st.write(
-        "Internação prolongada é definida como "
-        "mais de 7 dias entre a cirurgia e a alta."
+        "Internação prolongada é definida "
+        "como mais de 7 dias entre "
+        "a cirurgia e a alta."
     )
 
     st.write(
-        "O intervalo entre internação e cirurgia "
-        "é calculado automaticamente."
+        "O intervalo entre internação "
+        "e cirurgia é calculado "
+        "automaticamente."
     )
 
     st.write(
-        "A data da alta é utilizada para calcular "
-        "o tempo real após a cirurgia."
+        "A data da alta é utilizada "
+        "para calcular o tempo real "
+        "após a cirurgia."
     )
 
     st.markdown(

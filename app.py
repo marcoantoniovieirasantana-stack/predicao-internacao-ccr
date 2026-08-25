@@ -135,10 +135,7 @@ def criar_campo(feature):
         feature,
     )
 
-    # -----------------------------------------------------
-    # tempo_int_cir_dias NÃO É DIGITADO
-    # -----------------------------------------------------
-
+    # tempo_int_cir_dias é calculado pelas datas
     if feature == "tempo_int_cir_dias":
         return
 
@@ -381,7 +378,7 @@ with aba_predicao:
 
 
     # =====================================================
-    # CÁLCULO AUTOMÁTICO DO TEMPO
+    # TEMPO ENTRE INTERNAÇÃO E CIRURGIA
     # =====================================================
 
     if data_cirurgia >= data_internacao:
@@ -650,7 +647,6 @@ with aba_predicao:
             st.stop()
 
 
-        # Garante o valor derivado antes de montar o DataFrame
         valores[
             "tempo_int_cir_dias"
         ] = int(
@@ -907,7 +903,7 @@ with aba_auditoria:
     st.write(
         "Após a alta hospitalar, informe o prontuário "
         "para localizar a predição e registrar "
-        "os dias reais de internação."
+        "a data da alta."
     )
 
 
@@ -1012,6 +1008,9 @@ with aba_auditoria:
         )
 
 
+        data_cirurgia_registro = None
+
+
         if registro_auditoria.get(
             "data_internacao"
         ):
@@ -1032,15 +1031,17 @@ with aba_auditoria:
             "data_cirurgia"
         ):
 
-            data_cir = pd.to_datetime(
-                registro_auditoria[
-                    "data_cirurgia"
-                ]
+            data_cirurgia_registro = (
+                pd.to_datetime(
+                    registro_auditoria[
+                        "data_cirurgia"
+                    ]
+                ).date()
             )
 
             st.write(
                 f"**Data da cirurgia:** "
-                f"{data_cir.strftime('%d/%m/%Y')}"
+                f"{data_cirurgia_registro.strftime('%d/%m/%Y')}"
             )
 
 
@@ -1105,6 +1106,35 @@ with aba_auditoria:
                 "desfecho registrado."
             )
 
+
+            if registro_auditoria.get(
+                "data_alta"
+            ):
+
+                data_alta_registro = (
+                    pd.to_datetime(
+                        registro_auditoria[
+                            "data_alta"
+                        ]
+                    ).date()
+                )
+
+                st.write(
+                    f"**Data da alta:** "
+                    f"{data_alta_registro.strftime('%d/%m/%Y')}"
+                )
+
+
+            if registro_auditoria.get(
+                "dias_reais_internacao"
+            ) is not None:
+
+                st.write(
+                    f"**Dias reais após a cirurgia:** "
+                    f"{registro_auditoria['dias_reais_internacao']} dias"
+                )
+
+
             col1, col2, col3 = st.columns(3)
 
             with col1:
@@ -1136,28 +1166,83 @@ with aba_auditoria:
 
 
         # -------------------------------------------------
-        # REGISTRAR DESFECHO
+        # REGISTRAR DATA DA ALTA
         # -------------------------------------------------
 
         else:
 
-            dias_reais = st.number_input(
-                "Dias reais de internação após a cirurgia",
-                min_value=0,
-                max_value=365,
-                value=7,
-                step=1,
-                format="%d",
+            if data_cirurgia_registro is None:
+
+                st.error(
+                    "Este registro não possui data da cirurgia."
+                )
+
+                st.stop()
+
+
+            st.markdown(
+                "### Informar alta hospitalar"
             )
 
 
+            data_alta = st.date_input(
+                "Data da alta",
+                value=data_cirurgia_registro,
+                min_value=data_cirurgia_registro,
+                format="DD/MM/YYYY",
+                key="auditoria_data_alta",
+            )
+
+
+            # -------------------------------------------------
+            # CÁLCULO AUTOMÁTICO DOS DIAS REAIS
+            # -------------------------------------------------
+
+            dias_reais = (
+                data_alta
+                - data_cirurgia_registro
+            ).days
+
+
+            st.info(
+                f"**Dias reais de internação após a cirurgia:** "
+                f"{dias_reais} dia"
+                f"{'s' if dias_reais != 1 else ''}."
+            )
+
+
+            if dias_reais > 7:
+
+                st.write(
+                    "**Desfecho calculado:** "
+                    "Internação prolongada"
+                )
+
+            else:
+
+                st.write(
+                    "**Desfecho calculado:** "
+                    "Internação não prolongada"
+                )
+
+
             salvar_desfecho = st.button(
-                "Registrar desfecho e auditar modelo",
+                "Registrar alta e auditar modelo",
                 type="primary",
             )
 
 
             if salvar_desfecho:
+
+                if data_alta < data_cirurgia_registro:
+
+                    st.error(
+                        "A data da alta não pode ser "
+                        "anterior à data da cirurgia."
+                    )
+
+                    st.stop()
+
 
                 (
                     desfecho_real,
@@ -1172,6 +1257,9 @@ with aba_auditoria:
 
 
                 atualizacao = {
+
+                    "data_alta":
+                        data_alta.isoformat(),
 
                     "dias_reais_internacao":
                         int(dias_reais),
@@ -1213,12 +1301,25 @@ with aba_auditoria:
 
 
                     st.success(
-                        "Desfecho registrado com sucesso."
+                        "Alta e desfecho registrados "
+                        "com sucesso."
                     )
 
 
                     st.markdown(
                         "### Resultado da auditoria"
+                    )
+
+
+                    st.write(
+                        f"**Data da alta:** "
+                        f"{data_alta.strftime('%d/%m/%Y')}"
+                    )
+
+                    st.write(
+                        f"**Dias reais após a cirurgia:** "
+                        f"{dias_reais} dia"
+                        f"{'s' if dias_reais != 1 else ''}"
                     )
 
 
@@ -1303,13 +1404,18 @@ with st.expander(
 
     st.write(
         "O tempo entre internação e cirurgia é "
-        "calculado automaticamente pelas datas informadas."
+        "calculado automaticamente a partir das datas."
     )
 
     st.write(
-        "Após a alta, os dias reais de internação "
-        "são informados e a aplicação deriva "
-        "automaticamente o desfecho."
+        "Na auditoria, a data da alta é informada "
+        "e os dias reais após a cirurgia são calculados "
+        "automaticamente."
+    )
+
+    st.write(
+        "Internação prolongada é definida como "
+        "mais de 7 dias entre a cirurgia e a alta."
     )
 
     st.markdown(

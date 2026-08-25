@@ -20,6 +20,7 @@ BUNDLE_PATH = Path(__file__).with_name(
     "27_deployment_bundle.joblib"
 )
 
+
 # =========================================================
 # CARREGAMENTO DO MODELO
 # =========================================================
@@ -39,6 +40,7 @@ family = bundle.get("family", "Modelo")
 sensibilidade_meta = bundle.get(
     "min_sensitivity_target"
 )
+
 
 # =========================================================
 # CONEXÃO COM SUPABASE
@@ -68,6 +70,7 @@ except Exception as exc:
     st.exception(exc)
     st.stop()
 
+
 # =========================================================
 # VERIFICAÇÃO DO THRESHOLD
 # =========================================================
@@ -79,6 +82,7 @@ if threshold is None:
     )
 
     st.stop()
+
 
 # =========================================================
 # CATEGORIAS AMIGÁVEIS
@@ -114,8 +118,9 @@ def formatar_categoria(valor):
         .capitalize()
     )
 
+
 # =========================================================
-# FUNÇÃO DOS CAMPOS
+# FUNÇÃO PARA CRIAR CAMPOS DO MODELO
 # =========================================================
 
 valores = {}
@@ -130,7 +135,7 @@ def criar_campo(feature):
     )
 
     # -----------------------------------------------------
-    # NUMÉRICAS
+    # VARIÁVEIS QUANTITATIVAS
     # -----------------------------------------------------
 
     if meta.get("type") == "numeric":
@@ -178,7 +183,7 @@ def criar_campo(feature):
         )
 
     # -----------------------------------------------------
-    # CATEGÓRICAS
+    # VARIÁVEIS CATEGÓRICAS
     # -----------------------------------------------------
 
     elif meta.get("type") == "categorical":
@@ -204,6 +209,10 @@ def criar_campo(feature):
                 key=f"pred_{feature}",
             )
 
+    # -----------------------------------------------------
+    # FALLBACK
+    # -----------------------------------------------------
+
     else:
 
         valores[feature] = st.text_input(
@@ -221,13 +230,12 @@ def calcular_auditoria(
     dias_reais,
 ):
 
-    # Desfecho real derivado automaticamente
     if dias_reais > 7:
         desfecho_real = "Prolongada"
+
     else:
         desfecho_real = "Não prolongada"
 
-    # Verdadeiro positivo
     if (
         classificacao_prevista == "Alto risco"
         and desfecho_real == "Prolongada"
@@ -236,7 +244,6 @@ def calcular_auditoria(
         tipo_resultado = "VP"
         predicao = "Modelo acertou"
 
-    # Verdadeiro negativo
     elif (
         classificacao_prevista == "Baixo risco"
         and desfecho_real == "Não prolongada"
@@ -245,7 +252,6 @@ def calcular_auditoria(
         tipo_resultado = "VN"
         predicao = "Modelo acertou"
 
-    # Falso positivo
     elif (
         classificacao_prevista == "Alto risco"
         and desfecho_real == "Não prolongada"
@@ -254,7 +260,6 @@ def calcular_auditoria(
         tipo_resultado = "FP"
         predicao = "Modelo errou"
 
-    # Falso negativo
     else:
 
         tipo_resultado = "FN"
@@ -286,6 +291,7 @@ st.info(
     "e auditoria posterior."
 )
 
+
 # =========================================================
 # BARRA LATERAL
 # =========================================================
@@ -315,6 +321,7 @@ st.sidebar.caption(
     )
 )
 
+
 # =========================================================
 # ABAS
 # =========================================================
@@ -326,28 +333,52 @@ aba_predicao, aba_auditoria = st.tabs(
     ]
 )
 
+
 # =========================================================
 # ABA 1 - PREDIÇÃO
 # =========================================================
 
 with aba_predicao:
 
+    # =====================================================
+    # IDENTIFICAÇÃO
+    # =====================================================
+
     st.subheader(
-        "Identificação do caso"
+        "Identificação do paciente"
     )
 
-    id_caso = st.text_input(
-        "ID pseudonimizado do caso",
-        placeholder="Ex.: CCR-0001",
-        help=(
-            "Utilize um código do estudo. "
-            "Não informe nome, CPF ou prontuário."
-        ),
-    )
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        prontuario = st.text_input(
+            "Prontuário",
+            placeholder="Digite o prontuário",
+        )
+
+    with col2:
+
+        data_internacao = st.date_input(
+            "Data da internação",
+            format="DD/MM/YYYY",
+        )
+
+    with col3:
+
+        data_cirurgia = st.date_input(
+            "Data da cirurgia",
+            format="DD/MM/YYYY",
+        )
+
+    # =====================================================
+    # DADOS DO PACIENTE
+    # =====================================================
 
     st.subheader(
         "Dados do paciente"
     )
+
 
     # -----------------------------------------------------
     # DADOS DEMOGRÁFICOS
@@ -382,8 +413,9 @@ with aba_predicao:
                     "f_idade_anos_int"
                 )
 
+
     # -----------------------------------------------------
-    # CLÍNICA / ONCOLÓGICA
+    # CONDIÇÃO CLÍNICA E ONCOLÓGICA
     # -----------------------------------------------------
 
     with st.container(border=True):
@@ -420,8 +452,9 @@ with aba_predicao:
                     "f_neoadjuvancia"
                 )
 
+
     # -----------------------------------------------------
-    # CIRÚRGICO
+    # PROCEDIMENTO CIRÚRGICO
     # -----------------------------------------------------
 
     with st.container(border=True):
@@ -468,8 +501,9 @@ with aba_predicao:
                     "urgencia"
                 )
 
+
     # -----------------------------------------------------
-    # INTERNAÇÃO / UTI
+    # INTERNAÇÃO E CUIDADOS INTENSIVOS
     # -----------------------------------------------------
 
     with st.container(border=True):
@@ -498,6 +532,7 @@ with aba_predicao:
                     "uti"
                 )
 
+
     # -----------------------------------------------------
     # GARANTIA DE TODOS OS PREDITORES
     # -----------------------------------------------------
@@ -517,9 +552,10 @@ with aba_predicao:
             for feature in faltantes:
                 criar_campo(feature)
 
-    # -----------------------------------------------------
-    # CALCULAR
-    # -----------------------------------------------------
+
+    # =====================================================
+    # CALCULAR PREDIÇÃO
+    # =====================================================
 
     st.divider()
 
@@ -531,19 +567,41 @@ with aba_predicao:
 
     if calcular:
 
-        if not id_caso.strip():
+        # -------------------------------------------------
+        # VALIDAÇÕES
+        # -------------------------------------------------
+
+        if not prontuario.strip():
 
             st.warning(
-                "Informe o ID pseudonimizado "
-                "do caso antes de calcular."
+                "Informe o prontuário antes de calcular."
             )
 
             st.stop()
+
+        if data_cirurgia < data_internacao:
+
+            st.error(
+                "A data da cirurgia não pode ser "
+                "anterior à data da internação."
+            )
+
+            st.stop()
+
+
+        # -------------------------------------------------
+        # DATAFRAME DO MODELO
+        # -------------------------------------------------
 
         novo_paciente = pd.DataFrame(
             [valores],
             columns=predictors,
         )
+
+
+        # -------------------------------------------------
+        # PREDIÇÃO
+        # -------------------------------------------------
 
         try:
 
@@ -556,12 +614,12 @@ with aba_predicao:
         except Exception as exc:
 
             st.error(
-                "Não foi possível calcular "
-                "a predição."
+                "Não foi possível calcular a predição."
             )
 
             st.exception(exc)
             st.stop()
+
 
         if prob >= threshold:
 
@@ -575,14 +633,18 @@ with aba_predicao:
                 "Baixo risco"
             )
 
+
         # -------------------------------------------------
         # ID ÚNICO DA PREDIÇÃO
         # -------------------------------------------------
 
-        id_predicao = str(uuid4())
+        id_predicao = str(
+            uuid4()
+        )
+
 
         # -------------------------------------------------
-        # REGISTRO NO SUPABASE
+        # REGISTRO PARA SUPABASE
         # -------------------------------------------------
 
         registro = {
@@ -590,8 +652,14 @@ with aba_predicao:
             "id_predicao":
                 id_predicao,
 
-            "id_caso":
-                id_caso.strip(),
+            "prontuario":
+                prontuario.strip(),
+
+            "data_internacao":
+                data_internacao.isoformat(),
+
+            "data_cirurgia":
+                data_cirurgia.isoformat(),
 
             "probabilidade":
                 prob,
@@ -606,10 +674,16 @@ with aba_predicao:
                 str(family),
         }
 
-        # Adiciona os 13 preditores
+
+        # -------------------------------------------------
+        # ADICIONA PREDITORES
+        # -------------------------------------------------
+
         for feature in predictors:
 
-            valor = valores.get(feature)
+            valor = valores.get(
+                feature
+            )
 
             meta = schema.get(
                 feature,
@@ -635,6 +709,11 @@ with aba_predicao:
                     else None
                 )
 
+
+        # -------------------------------------------------
+        # SALVA NO BANCO
+        # -------------------------------------------------
+
         try:
 
             supabase.table(
@@ -654,9 +733,10 @@ with aba_predicao:
             st.exception(exc)
             st.stop()
 
-        # -------------------------------------------------
+
+        # =================================================
         # RESULTADO
-        # -------------------------------------------------
+        # =================================================
 
         st.markdown(
             "## Resultado"
@@ -710,9 +790,24 @@ with aba_predicao:
                     f"{threshold:.0%}."
                 )
 
+
         st.success(
             "Predição registrada com sucesso "
             "no banco de auditoria."
+        )
+
+        st.write(
+            f"**Prontuário:** {prontuario}"
+        )
+
+        st.write(
+            f"**Data da internação:** "
+            f"{data_internacao.strftime('%d/%m/%Y')}"
+        )
+
+        st.write(
+            f"**Data da cirurgia:** "
+            f"{data_cirurgia.strftime('%d/%m/%Y')}"
         )
 
         st.write(
@@ -723,11 +818,6 @@ with aba_predicao:
             id_predicao
         )
 
-        st.caption(
-            "Esse identificador permitirá "
-            "vincular posteriormente o desfecho "
-            "real à predição realizada."
-        )
 
 # =========================================================
 # ABA 2 - AUDITORIA
@@ -740,28 +830,35 @@ with aba_auditoria:
     )
 
     st.write(
-        "Após a alta hospitalar, informe o "
-        "ID do caso para localizar a predição "
-        "e registrar os dias reais de internação."
+        "Após a alta hospitalar, informe o prontuário "
+        "para localizar a predição e registrar "
+        "os dias reais de internação."
     )
 
-    id_busca = st.text_input(
-        "ID pseudonimizado do caso",
-        key="auditoria_id_caso",
-        placeholder="Ex.: CCR-0001",
+
+    # -----------------------------------------------------
+    # BUSCA PELO PRONTUÁRIO
+    # -----------------------------------------------------
+
+    prontuario_busca = st.text_input(
+        "Prontuário",
+        key="auditoria_prontuario",
+        placeholder="Digite o prontuário",
     )
+
 
     buscar = st.button(
         "Buscar predição",
         key="buscar_predicao",
     )
 
+
     if buscar:
 
-        if not id_busca.strip():
+        if not prontuario_busca.strip():
 
             st.warning(
-                "Informe o ID do caso."
+                "Informe o prontuário."
             )
 
         else:
@@ -775,8 +872,8 @@ with aba_auditoria:
                     )
                     .select("*")
                     .eq(
-                        "id_caso",
-                        id_busca.strip(),
+                        "prontuario",
+                        prontuario_busca.strip(),
                     )
                     .order(
                         "data_predicao",
@@ -795,12 +892,11 @@ with aba_auditoria:
 
                     st.warning(
                         "Nenhuma predição encontrada "
-                        "para este ID."
+                        "para este prontuário."
                     )
 
                 else:
 
-                    # Guarda na sessão
                     st.session_state[
                         "registro_auditoria"
                     ] = registros[0]
@@ -814,8 +910,9 @@ with aba_auditoria:
 
                 st.exception(exc)
 
+
     # -----------------------------------------------------
-    # REGISTRO ENCONTRADO
+    # REGISTRO LOCALIZADO
     # -----------------------------------------------------
 
     registro_auditoria = (
@@ -824,6 +921,7 @@ with aba_auditoria:
         )
     )
 
+
     if registro_auditoria:
 
         st.divider()
@@ -831,6 +929,51 @@ with aba_auditoria:
         st.markdown(
             "### Predição localizada"
         )
+
+
+        # -------------------------------------------------
+        # IDENTIFICAÇÃO
+        # -------------------------------------------------
+
+        st.write(
+            f"**Prontuário:** "
+            f"{registro_auditoria.get('prontuario', '')}"
+        )
+
+        if registro_auditoria.get(
+            "data_internacao"
+        ):
+
+            data_int = pd.to_datetime(
+                registro_auditoria[
+                    "data_internacao"
+                ]
+            )
+
+            st.write(
+                f"**Data da internação:** "
+                f"{data_int.strftime('%d/%m/%Y')}"
+            )
+
+        if registro_auditoria.get(
+            "data_cirurgia"
+        ):
+
+            data_cir = pd.to_datetime(
+                registro_auditoria[
+                    "data_cirurgia"
+                ]
+            )
+
+            st.write(
+                f"**Data da cirurgia:** "
+                f"{data_cir.strftime('%d/%m/%Y')}"
+            )
+
+
+        # -------------------------------------------------
+        # RESULTADO PREVISTO
+        # -------------------------------------------------
 
         col1, col2, col3 = st.columns(3)
 
@@ -857,13 +1000,15 @@ with aba_auditoria:
                 f"{float(registro_auditoria['threshold']):.0%}",
             )
 
+
         st.write(
             f"**ID da predição:** "
             f"{registro_auditoria['id_predicao']}"
         )
 
+
         # -------------------------------------------------
-        # SE JÁ FOI AUDITADO
+        # CASO JÁ AUDITADO
         # -------------------------------------------------
 
         if (
@@ -906,6 +1051,7 @@ with aba_auditoria:
                     ],
                 )
 
+
         # -------------------------------------------------
         # REGISTRAR DESFECHO
         # -------------------------------------------------
@@ -921,10 +1067,12 @@ with aba_auditoria:
                 format="%d",
             )
 
+
             salvar_desfecho = st.button(
                 "Registrar desfecho e auditar modelo",
                 type="primary",
             )
+
 
             if salvar_desfecho:
 
@@ -938,6 +1086,7 @@ with aba_auditoria:
                     ],
                     int(dias_reais),
                 )
+
 
                 atualizacao = {
 
@@ -959,6 +1108,7 @@ with aba_auditoria:
                         ).isoformat(),
                 }
 
+
                 try:
 
                     (
@@ -978,18 +1128,21 @@ with aba_auditoria:
                         .execute()
                     )
 
+
                     st.success(
-                        "Desfecho registrado "
-                        "com sucesso."
+                        "Desfecho registrado com sucesso."
                     )
+
 
                     st.markdown(
                         "### Resultado da auditoria"
                     )
 
+
                     col1, col2, col3 = (
                         st.columns(3)
                     )
+
 
                     with col1:
 
@@ -998,6 +1151,7 @@ with aba_auditoria:
                             desfecho_real,
                         )
 
+
                     with col2:
 
                         st.metric(
@@ -1005,12 +1159,14 @@ with aba_auditoria:
                             tipo_resultado,
                         )
 
+
                     with col3:
 
                         st.metric(
                             "Predição",
                             resultado_predicao,
                         )
+
 
                     if (
                         resultado_predicao
@@ -1029,11 +1185,12 @@ with aba_auditoria:
                             "a classificação deste caso."
                         )
 
-                    # Limpa cache de busca
+
                     st.session_state.pop(
                         "registro_auditoria",
                         None,
                     )
+
 
                 except Exception as exc:
 
@@ -1044,11 +1201,13 @@ with aba_auditoria:
 
                     st.exception(exc)
 
+
 # =========================================================
 # SOBRE
 # =========================================================
 
 st.divider()
+
 
 with st.expander(
     "Sobre o sistema de auditoria"
@@ -1061,7 +1220,7 @@ with st.expander(
 
     st.write(
         "Após a alta, os dias reais de internação "
-        "são informados. A aplicação deriva "
+        "são informados e a aplicação deriva "
         "automaticamente o desfecho."
     )
 
@@ -1073,13 +1232,9 @@ with st.expander(
 - **VN:** previu baixo risco e não houve internação prolongada.
 - **FP:** previu alto risco e não houve internação prolongada.
 - **FN:** previu baixo risco e houve internação prolongada.
+
+**VP e VN → Modelo acertou**
+
+**FP e FN → Modelo errou**
         """
-    )
-
-    st.write(
-        "VP e VN → **Modelo acertou**"
-    )
-
-    st.write(
-        "FP e FN → **Modelo errou**"
     )

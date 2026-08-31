@@ -6,3 +6,5 @@ joblib>=1.3
 xgboost
 lightgbm
 supabase
+shap
+matplotlib

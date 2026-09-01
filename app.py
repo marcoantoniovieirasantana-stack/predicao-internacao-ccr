@@ -26,27 +26,61 @@ BUNDLE_PATH = Path(__file__).with_name(
 
 
 # =========================================================
-# ESTADO / LIMPEZA
+# CONTROLE DE VERSÃO DO FORMULÁRIO
 # =========================================================
 
-def limpar_novo_cadastro():
+if "form_version" not in st.session_state:
+    st.session_state["form_version"] = 0
 
-    chaves = [
+
+form_version = st.session_state["form_version"]
+
+
+def iniciar_novo_paciente():
+
+    # -----------------------------------------------------
+    # Remove estados antigos dos campos clínicos
+    # -----------------------------------------------------
+
+    prefixos_clinicos = (
+        "pred_",
+        "prontuario_",
+        "data_internacao_",
+        "data_cirurgia_",
+    )
+
+    chaves_remover = [
         chave
         for chave in list(st.session_state.keys())
-        if (
-            chave.startswith("pred_")
-            or chave in [
-                "prontuario",
-                "data_internacao",
-                "data_cirurgia",
-                "ultima_predicao",
-            ]
-        )
+        if chave.startswith(prefixos_clinicos)
     ]
 
-    for chave in chaves:
-        st.session_state.pop(chave, None)
+    for chave in chaves_remover:
+        st.session_state.pop(
+            chave,
+            None,
+        )
+
+    # -----------------------------------------------------
+    # Remove a última predição e explicação SHAP
+    # -----------------------------------------------------
+
+    st.session_state.pop(
+        "ultima_predicao",
+        None,
+    )
+
+    # -----------------------------------------------------
+    # Cria uma nova versão do formulário
+    # -----------------------------------------------------
+
+    st.session_state["form_version"] = (
+        st.session_state.get(
+            "form_version",
+            0,
+        )
+        + 1
+    )
 
 
 def sair_area_admin():
@@ -80,7 +114,7 @@ def sair_area_admin():
 
 
 # =========================================================
-# CSS LEVE
+# CSS
 # =========================================================
 
 st.markdown(
@@ -126,9 +160,19 @@ bundle = carregar_bundle()
 
 model = bundle["model"]
 predictors = bundle["predictors"]
-schema = bundle.get("ui_schema", {})
-threshold = bundle.get("clinical_threshold")
-family = bundle.get("family", "Modelo")
+schema = bundle.get(
+    "ui_schema",
+    {},
+)
+
+threshold = bundle.get(
+    "clinical_threshold"
+)
+
+family = bundle.get(
+    "family",
+    "Modelo",
+)
 
 sensibilidade_meta = bundle.get(
     "min_sensitivity_target"
@@ -170,7 +214,10 @@ except Exception as exc:
         "Não foi possível conectar ao banco de auditoria."
     )
 
-    st.exception(exc)
+    st.exception(
+        exc
+    )
+
     st.stop()
 
 
@@ -243,14 +290,22 @@ def formatar_categoria(valor):
     if valor is None:
         return ""
 
-    texto = str(valor)
+    texto = str(
+        valor
+    )
 
     if texto in mapa_exibicao:
-        return mapa_exibicao[texto]
+
+        return mapa_exibicao[
+            texto
+        ]
 
     return (
         texto
-        .replace("_", " ")
+        .replace(
+            "_",
+            " ",
+        )
         .capitalize()
     )
 
@@ -261,6 +316,7 @@ def formatar_valor_paciente(
 ):
 
     if valor is None:
+
         return "Não informado"
 
     meta = schema.get(
@@ -268,7 +324,9 @@ def formatar_valor_paciente(
         {},
     )
 
-    if meta.get("type") == "categorical":
+    if meta.get(
+        "type"
+    ) == "categorical":
 
         return formatar_categoria(
             valor
@@ -280,11 +338,16 @@ def formatar_valor_paciente(
     ):
 
         if valor.is_integer():
+
             return str(
-                int(valor)
+                int(
+                    valor
+                )
             )
 
-    return str(valor)
+    return str(
+        valor
+    )
 
 
 # =========================================================
@@ -294,7 +357,10 @@ def formatar_valor_paciente(
 valores = {}
 
 
-def criar_campo(feature):
+def criar_campo(
+    feature,
+    versao_formulario,
+):
 
     meta = schema.get(
         feature,
@@ -309,19 +375,36 @@ def criar_campo(feature):
         ),
     )
 
+    # -----------------------------------------------------
+    # ESTE CAMPO É CALCULADO PELAS DATAS
+    # -----------------------------------------------------
+
     if feature == "tempo_int_cir_dias":
         return
 
-    if meta.get("type") == "numeric":
 
-        min_v = meta.get("min")
-        max_v = meta.get("max")
+    # -----------------------------------------------------
+    # NUMÉRICO
+    # -----------------------------------------------------
+
+    if meta.get(
+        "type"
+    ) == "numeric":
+
+        min_v = meta.get(
+            "min"
+        )
+
+        max_v = meta.get(
+            "max"
+        )
 
         help_txt = None
 
         if (
             min_v is not None
-            and max_v is not None
+            and
+            max_v is not None
         ):
 
             help_txt = (
@@ -330,15 +413,25 @@ def criar_campo(feature):
                 f"{int(round(max_v))}."
             )
 
-        valores[feature] = st.number_input(
+        valores[
+            feature
+        ] = st.number_input(
             label,
             min_value=(
-                int(round(min_v))
+                int(
+                    round(
+                        min_v
+                    )
+                )
                 if min_v is not None
                 else None
             ),
             max_value=(
-                int(round(max_v))
+                int(
+                    round(
+                        max_v
+                    )
+                )
                 if max_v is not None
                 else None
             ),
@@ -347,10 +440,21 @@ def criar_campo(feature):
             format="%d",
             placeholder="Informe o valor",
             help=help_txt,
-            key=f"pred_{feature}",
+            key=(
+                f"pred_"
+                f"{feature}_"
+                f"{versao_formulario}"
+            ),
         )
 
-    elif meta.get("type") == "categorical":
+
+    # -----------------------------------------------------
+    # CATEGÓRICO
+    # -----------------------------------------------------
+
+    elif meta.get(
+        "type"
+    ) == "categorical":
 
         options = meta.get(
             "options",
@@ -359,29 +463,52 @@ def criar_campo(feature):
 
         if options:
 
-            valores[feature] = st.selectbox(
+            valores[
+                feature
+            ] = st.selectbox(
                 label,
                 options=options,
                 index=None,
                 placeholder="Selecione uma opção",
                 format_func=formatar_categoria,
-                key=f"pred_{feature}",
+                key=(
+                    f"pred_"
+                    f"{feature}_"
+                    f"{versao_formulario}"
+                ),
             )
 
         else:
 
-            valores[feature] = st.text_input(
+            valores[
+                feature
+            ] = st.text_input(
                 label,
                 value="",
-                key=f"pred_{feature}",
+                key=(
+                    f"pred_"
+                    f"{feature}_"
+                    f"{versao_formulario}"
+                ),
             )
+
+
+    # -----------------------------------------------------
+    # OUTROS
+    # -----------------------------------------------------
 
     else:
 
-        valores[feature] = st.text_input(
+        valores[
+            feature
+        ] = st.text_input(
             label,
             value="",
-            key=f"pred_{feature}",
+            key=(
+                f"pred_"
+                f"{feature}_"
+                f"{versao_formulario}"
+            ),
         )
 
 
@@ -395,13 +522,24 @@ def calcular_auditoria(
 ):
 
     if dias_reais > 7:
-        desfecho_real = "Prolongada"
+
+        desfecho_real = (
+            "Prolongada"
+        )
+
     else:
-        desfecho_real = "Não prolongada"
+
+        desfecho_real = (
+            "Não prolongada"
+        )
+
 
     if (
-        classificacao_prevista == "Alto risco"
-        and desfecho_real == "Prolongada"
+        classificacao_prevista
+        == "Alto risco"
+        and
+        desfecho_real
+        == "Prolongada"
     ):
 
         return (
@@ -410,9 +548,13 @@ def calcular_auditoria(
             "Modelo acertou",
         )
 
+
     elif (
-        classificacao_prevista == "Baixo risco"
-        and desfecho_real == "Não prolongada"
+        classificacao_prevista
+        == "Baixo risco"
+        and
+        desfecho_real
+        == "Não prolongada"
     ):
 
         return (
@@ -421,9 +563,13 @@ def calcular_auditoria(
             "Modelo acertou",
         )
 
+
     elif (
-        classificacao_prevista == "Alto risco"
-        and desfecho_real == "Não prolongada"
+        classificacao_prevista
+        == "Alto risco"
+        and
+        desfecho_real
+        == "Não prolongada"
     ):
 
         return (
@@ -431,6 +577,7 @@ def calcular_auditoria(
             "FP",
             "Modelo errou",
         )
+
 
     else:
 
@@ -453,19 +600,27 @@ def dividir_seguro(
     if denominador == 0:
         return None
 
-    return numerador / denominador
+    return (
+        numerador
+        / denominador
+    )
 
 
-def mostrar_percentual(valor):
+def mostrar_percentual(
+    valor
+):
 
     if valor is None:
+
         return "—"
 
-    return f"{valor:.1%}"
+    return (
+        f"{valor:.1%}"
+    )
 
 
 # =========================================================
-# SHAP SOB DEMANDA
+# SHAP
 # =========================================================
 
 def identificar_variavel_original(
@@ -478,10 +633,20 @@ def identificar_variavel_original(
 
     nome = (
         nome
-        .replace("num__", "")
-        .replace("cat__", "")
-        .replace("nom__", "")
+        .replace(
+            "num__",
+            "",
+        )
+        .replace(
+            "cat__",
+            "",
+        )
+        .replace(
+            "nom__",
+            "",
+        )
     )
+
 
     for original in sorted(
         predictors,
@@ -490,12 +655,16 @@ def identificar_variavel_original(
     ):
 
         if nome == original:
+
             return original
 
         if nome.startswith(
-            original + "_"
+            original
+            + "_"
         ):
+
             return original
+
 
     return nome
 
@@ -504,9 +673,11 @@ def calcular_shap_individual(
     novo_paciente
 ):
 
+    # Importação apenas quando necessário
     import shap
 
     pipeline = model
+
 
     if not hasattr(
         pipeline,
@@ -514,24 +685,34 @@ def calcular_shap_individual(
     ):
 
         raise ValueError(
-            "O modelo salvo não possui pipeline compatível com SHAP."
+            "O modelo salvo não possui "
+            "pipeline compatível com SHAP."
         )
 
+
     preprocessador = (
-        pipeline.named_steps[
+        pipeline
+        .named_steps[
             "preprocess"
         ]
     )
 
+
     modelo_shap = (
-        pipeline.named_steps[
+        pipeline
+        .named_steps[
             "model"
         ]
     )
 
-    X_novo = novo_paciente[
-        predictors
-    ].copy()
+
+    X_novo = (
+        novo_paciente[
+            predictors
+        ]
+        .copy()
+    )
+
 
     X_proc = (
         preprocessador
@@ -540,62 +721,91 @@ def calcular_shap_individual(
         )
     )
 
+
     if hasattr(
         X_proc,
         "toarray",
     ):
-        X_proc = X_proc.toarray()
+
+        X_proc = (
+            X_proc
+            .toarray()
+        )
+
 
     nomes_features = (
         preprocessador
         .get_feature_names_out()
     )
 
+
     nomes_features_limpos = [
 
-        str(nome)
-        .replace("num__", "")
-        .replace("cat__", "")
-        .replace("nom__", "")
+        str(
+            nome
+        )
+        .replace(
+            "num__",
+            "",
+        )
+        .replace(
+            "cat__",
+            "",
+        )
+        .replace(
+            "nom__",
+            "",
+        )
 
         for nome
         in nomes_features
     ]
+
 
     X_proc_df = pd.DataFrame(
         X_proc,
         columns=nomes_features_limpos,
     )
 
+
     if hasattr(
         modelo_shap,
         "enable_categorical",
     ):
+
         modelo_shap.enable_categorical = False
+
 
     if hasattr(
         modelo_shap,
         "cat_feature_indices",
     ):
+
         modelo_shap.cat_feature_indices = None
+
 
     if hasattr(
         modelo_shap,
         "_xgb_enable_categorical",
     ):
+
         modelo_shap._xgb_enable_categorical = False
+
 
     explainer = shap.TreeExplainer(
         modelo_shap
     )
 
+
     explicacao = explainer(
         X_proc_df
     )
 
+
     valores_shap = np.asarray(
         explicacao.values
     )
+
 
     if valores_shap.ndim == 3:
 
@@ -607,18 +817,25 @@ def calcular_shap_individual(
             ]
         )
 
+
     elif valores_shap.ndim == 2:
 
         valores_shap = (
-            valores_shap[0]
+            valores_shap[
+                0
+            ]
         )
+
 
     else:
 
         valores_shap = (
             valores_shap
-            .reshape(-1)
+            .reshape(
+                -1
+            )
         )
+
 
     tabela_transformada = pd.DataFrame(
         {
@@ -629,6 +846,7 @@ def calcular_shap_individual(
                 valores_shap,
         }
     )
+
 
     tabela_transformada[
         "feature_original"
@@ -641,6 +859,7 @@ def calcular_shap_individual(
         )
     )
 
+
     tabela_agregada = (
         tabela_transformada
         .groupby(
@@ -652,6 +871,7 @@ def calcular_shap_individual(
         .sum()
     )
 
+
     tabela_agregada[
         "variavel"
     ] = (
@@ -662,18 +882,27 @@ def calcular_shap_individual(
             lambda x:
                 nomes_clinicos.get(
                     x,
-                    str(x)
-                    .replace("_", " ")
+                    str(
+                        x
+                    )
+                    .replace(
+                        "_",
+                        " ",
+                    )
                     .capitalize(),
                 )
         )
     )
 
+
     valores_originais = (
         novo_paciente
-        .iloc[0]
+        .iloc[
+            0
+        ]
         .to_dict()
     )
+
 
     tabela_agregada[
         "valor_informado"
@@ -692,6 +921,7 @@ def calcular_shap_individual(
         )
     )
 
+
     tabela_agregada[
         "impacto_absoluto"
     ] = (
@@ -700,6 +930,7 @@ def calcular_shap_individual(
         ]
         .abs()
     )
+
 
     return (
         tabela_agregada
@@ -724,6 +955,7 @@ def carregar_todos_registros():
     tamanho_lote = 1000
     inicio = 0
 
+
     while True:
 
         fim = (
@@ -732,12 +964,15 @@ def carregar_todos_registros():
             - 1
         )
 
+
         resposta = (
             supabase
             .table(
                 "auditoria_predicoes"
             )
-            .select("*")
+            .select(
+                "*"
+            )
             .order(
                 "data_predicao",
                 desc=True,
@@ -749,20 +984,28 @@ def carregar_todos_registros():
             .execute()
         )
 
+
         lote = (
             resposta.data
             if resposta.data
             else []
         )
 
+
         todos.extend(
             lote
         )
 
-        if len(lote) < tamanho_lote:
+
+        if len(
+            lote
+        ) < tamanho_lote:
+
             break
 
+
         inicio += tamanho_lote
+
 
     return todos
 
@@ -787,12 +1030,13 @@ st.caption(
 
 
 # =========================================================
-# ÁREA ADMINISTRATIVA NA BARRA LATERAL
+# ÁREA ADMINISTRATIVA
 # =========================================================
 
 st.sidebar.markdown(
     "## 🔐 Área administrativa"
 )
+
 
 admin_autenticado = (
     st.session_state.get(
@@ -801,16 +1045,21 @@ admin_autenticado = (
     )
 )
 
+
 pagina_admin = None
 
 
 if not admin_autenticado:
 
-    senha_digitada = st.sidebar.text_input(
-        "Senha administrativa",
-        type="password",
-        key="senha_admin_input",
+    senha_digitada = (
+        st.sidebar
+        .text_input(
+            "Senha administrativa",
+            type="password",
+            key="senha_admin_input",
+        )
     )
+
 
     if st.sidebar.button(
         "Acessar área administrativa",
@@ -835,9 +1084,11 @@ if not admin_autenticado:
                 "Senha administrativa não configurada."
             )
 
+
         if (
             senha_correta
-            and senha_digitada
+            and
+            senha_digitada
             == senha_correta
         ):
 
@@ -846,6 +1097,7 @@ if not admin_autenticado:
             ] = True
 
             st.rerun()
+
 
         else:
 
@@ -860,17 +1112,22 @@ else:
         "Acesso administrativo liberado."
     )
 
-    pagina_admin = st.sidebar.radio(
-        "Área administrativa",
-        [
-            "—",
-            "📋 Auditoria",
-            "📊 Desempenho do modelo",
-            "📥 Gerar planilha CSV",
-        ],
-        label_visibility="collapsed",
-        key="pagina_admin",
+
+    pagina_admin = (
+        st.sidebar
+        .radio(
+            "Área administrativa",
+            [
+                "—",
+                "📋 Auditoria",
+                "📊 Desempenho do modelo",
+                "📥 Gerar planilha CSV",
+            ],
+            label_visibility="collapsed",
+            key="pagina_admin",
+        )
     )
+
 
     if st.sidebar.button(
         "🚪 Sair da área administrativa",
@@ -887,17 +1144,22 @@ st.sidebar.markdown(
     "## 🧠 Sobre o modelo"
 )
 
+
 st.sidebar.write(
     f"**Algoritmo:** {family}"
 )
+
 
 st.sidebar.write(
     "**Desfecho:** Internação > 7 dias"
 )
 
+
 st.sidebar.write(
-    f"**Ponto de corte:** {threshold:.0%}"
+    f"**Ponto de corte:** "
+    f"{threshold:.0%}"
 )
+
 
 if sensibilidade_meta is not None:
 
@@ -908,12 +1170,13 @@ if sensibilidade_meta is not None:
 
 
 # =========================================================
-# MODO ADMIN OU MODO CLÍNICO
+# DEFINE MODO
 # =========================================================
 
 modo_admin = (
     admin_autenticado
-    and pagina_admin
+    and
+    pagina_admin
     not in [
         None,
         "—",
@@ -928,16 +1191,18 @@ modo_admin = (
 if not modo_admin:
 
 
-    aba_predicao, aba_explicacao = st.tabs(
-        [
-            "🔎 Nova predição",
-            "🧠 Entenda a decisão",
-        ]
+    aba_predicao, aba_explicacao = (
+        st.tabs(
+            [
+                "🔎 Nova predição",
+                "🧠 Entenda a decisão",
+            ]
+        )
     )
 
 
     # =====================================================
-    # ABA NOVA PREDIÇÃO
+    # ABA — NOVA PREDIÇÃO
     # =====================================================
 
     with aba_predicao:
@@ -945,7 +1210,10 @@ if not modo_admin:
 
         col_titulo, col_novo = (
             st.columns(
-                [4, 1]
+                [
+                    4,
+                    1,
+                ]
             )
         )
 
@@ -962,9 +1230,21 @@ if not modo_admin:
             st.button(
                 "➕ Iniciar novo paciente",
                 use_container_width=True,
-                on_click=limpar_novo_cadastro,
+                on_click=iniciar_novo_paciente,
             )
 
+
+        # Atualiza a versão após eventual callback
+        form_version = (
+            st.session_state[
+                "form_version"
+            ]
+        )
+
+
+        # =================================================
+        # IDENTIFICAÇÃO
+        # =================================================
 
         with st.container(
             border=True
@@ -976,7 +1256,9 @@ if not modo_admin:
 
 
             col1, col2, col3 = (
-                st.columns(3)
+                st.columns(
+                    3
+                )
             )
 
 
@@ -986,29 +1268,46 @@ if not modo_admin:
                     "Prontuário",
                     value="",
                     placeholder="Digite o prontuário",
-                    key="prontuario",
+                    key=(
+                        f"prontuario_"
+                        f"{form_version}"
+                    ),
                 )
 
 
             with col2:
 
-                data_internacao = st.date_input(
-                    "Data da internação",
-                    value=None,
-                    format="DD/MM/YYYY",
-                    key="data_internacao",
+                data_internacao = (
+                    st.date_input(
+                        "Data da internação",
+                        value=None,
+                        format="DD/MM/YYYY",
+                        key=(
+                            f"data_internacao_"
+                            f"{form_version}"
+                        ),
+                    )
                 )
 
 
             with col3:
 
-                data_cirurgia = st.date_input(
-                    "Data da cirurgia",
-                    value=None,
-                    format="DD/MM/YYYY",
-                    key="data_cirurgia",
+                data_cirurgia = (
+                    st.date_input(
+                        "Data da cirurgia",
+                        value=None,
+                        format="DD/MM/YYYY",
+                        key=(
+                            f"data_cirurgia_"
+                            f"{form_version}"
+                        ),
+                    )
                 )
 
+
+            # =============================================
+            # INTERVALO INTERNAÇÃO → CIRURGIA
+            # =============================================
 
             tempo_int_cir_dias = None
 
@@ -1053,15 +1352,25 @@ if not modo_admin:
                     )
 
 
+        # =================================================
+        # DADOS PARA PREDIÇÃO
+        # =================================================
+
         st.markdown(
             "## Dados para predição"
         )
 
 
         linha1_col1, linha1_col2 = (
-            st.columns(2)
+            st.columns(
+                2
+            )
         )
 
+
+        # -------------------------------------------------
+        # DADOS DO PACIENTE
+        # -------------------------------------------------
 
         with linha1_col1:
 
@@ -1084,9 +1393,14 @@ if not modo_admin:
                     if feature in predictors:
 
                         criar_campo(
-                            feature
+                            feature,
+                            form_version,
                         )
 
+
+        # -------------------------------------------------
+        # DADOS ONCOLÓGICOS
+        # -------------------------------------------------
 
         with linha1_col2:
 
@@ -1108,14 +1422,21 @@ if not modo_admin:
                     if feature in predictors:
 
                         criar_campo(
-                            feature
+                            feature,
+                            form_version,
                         )
 
 
         linha2_col1, linha2_col2 = (
-            st.columns(2)
+            st.columns(
+                2
+            )
         )
 
+
+        # -------------------------------------------------
+        # PROCEDIMENTO CIRÚRGICO
+        # -------------------------------------------------
 
         with linha2_col1:
 
@@ -1137,9 +1458,14 @@ if not modo_admin:
                     if feature in predictors:
 
                         criar_campo(
-                            feature
+                            feature,
+                            form_version,
                         )
 
+
+        # -------------------------------------------------
+        # INTERNAÇÃO E CUIDADOS
+        # -------------------------------------------------
 
         with linha2_col2:
 
@@ -1160,7 +1486,8 @@ if not modo_admin:
                     if feature in predictors:
 
                         criar_campo(
-                            feature
+                            feature,
+                            form_version,
                         )
 
 
@@ -1183,13 +1510,18 @@ if not modo_admin:
                     )
 
 
+        # =================================================
+        # OUTRAS VARIÁVEIS
+        # =================================================
+
         faltantes = [
             feature
             for feature in predictors
             if (
                 feature not in valores
                 and
-                feature != "tempo_int_cir_dias"
+                feature
+                != "tempo_int_cir_dias"
             )
         ]
 
@@ -1203,16 +1535,29 @@ if not modo_admin:
                 for feature in faltantes:
 
                     criar_campo(
-                        feature
+                        feature,
+                        form_version,
                     )
 
+
+        # =================================================
+        # BOTÃO CALCULAR
+        # =================================================
 
         calcular = st.button(
             "🧠 Calcular risco de internação prolongada",
             type="primary",
             use_container_width=True,
+            key=(
+                f"calcular_"
+                f"{form_version}"
+            ),
         )
 
+
+        # =================================================
+        # EXECUTAR PREDIÇÃO
+        # =================================================
 
         if calcular:
 
@@ -1260,8 +1605,8 @@ if not modo_admin:
             if tempo_int_cir_dias is None:
 
                 st.error(
-                    "Não foi possível calcular "
-                    "o intervalo entre internação e cirurgia."
+                    "Não foi possível calcular o intervalo "
+                    "entre internação e cirurgia."
                 )
 
                 st.stop()
@@ -1273,6 +1618,10 @@ if not modo_admin:
                 tempo_int_cir_dias
             )
 
+
+            # =============================================
+            # VALIDAR CAMPOS
+            # =============================================
 
             campos_faltantes = []
 
@@ -1321,6 +1670,11 @@ if not modo_admin:
                 )
 
 
+                st.write(
+                    "**Campos pendentes:**"
+                )
+
+
                 for campo in campos_faltantes:
 
                     st.write(
@@ -1331,18 +1685,34 @@ if not modo_admin:
                 st.stop()
 
 
-            novo_paciente = pd.DataFrame(
-                [valores],
-                columns=predictors,
+            # =============================================
+            # DATAFRAME
+            # =============================================
+
+            novo_paciente = (
+                pd.DataFrame(
+                    [
+                        valores
+                    ],
+                    columns=predictors,
+                )
             )
 
+
+            # =============================================
+            # PROBABILIDADE
+            # =============================================
 
             try:
 
                 prob = float(
-                    model.predict_proba(
+                    model
+                    .predict_proba(
                         novo_paciente
-                    )[0, 1]
+                    )[
+                        0,
+                        1
+                    ]
                 )
 
 
@@ -1352,10 +1722,16 @@ if not modo_admin:
                     "Não foi possível calcular a predição."
                 )
 
-                st.exception(exc)
+                st.exception(
+                    exc
+                )
 
                 st.stop()
 
+
+            # =============================================
+            # CLASSIFICAÇÃO
+            # =============================================
 
             classificacao_prevista = (
                 "Alto risco"
@@ -1368,6 +1744,10 @@ if not modo_admin:
                 uuid4()
             )
 
+
+            # =============================================
+            # REGISTRO
+            # =============================================
 
             registro = {
 
@@ -1387,13 +1767,17 @@ if not modo_admin:
                     prob,
 
                 "threshold":
-                    float(threshold),
+                    float(
+                        threshold
+                    ),
 
                 "classificacao_prevista":
                     classificacao_prevista,
 
                 "modelo":
-                    str(family),
+                    str(
+                        family
+                    ),
             }
 
 
@@ -1410,20 +1794,30 @@ if not modo_admin:
 
 
                 if (
-                    meta.get("type")
+                    meta.get(
+                        "type"
+                    )
                     == "numeric"
                 ):
 
                     registro[
                         feature
-                    ] = int(valor)
+                    ] = int(
+                        valor
+                    )
 
                 else:
 
                     registro[
                         feature
-                    ] = str(valor)
+                    ] = str(
+                        valor
+                    )
 
+
+            # =============================================
+            # SALVAR NO SUPABASE
+            # =============================================
 
             try:
 
@@ -1447,10 +1841,16 @@ if not modo_admin:
                     "no banco de auditoria."
                 )
 
-                st.exception(exc)
+                st.exception(
+                    exc
+                )
 
                 st.stop()
 
+
+            # =============================================
+            # GUARDAR PARA SHAP
+            # =============================================
 
             st.session_state[
                 "ultima_predicao"
@@ -1469,11 +1869,18 @@ if not modo_admin:
                     classificacao_prevista,
 
                 "dados":
-                    novo_paciente.to_dict(
+                    novo_paciente
+                    .to_dict(
                         orient="records"
-                    )[0],
+                    )[
+                        0
+                    ],
             }
 
+
+            # =============================================
+            # RESULTADO
+            # =============================================
 
             st.markdown(
                 "## Resultado da predição"
@@ -1497,6 +1904,7 @@ if not modo_admin:
                     f"ponto de corte {threshold:.0%}."
                 )
 
+
             else:
 
                 st.success(
@@ -1506,6 +1914,11 @@ if not modo_admin:
                 )
 
 
+            st.success(
+                "Predição registrada no banco de auditoria."
+            )
+
+
             st.info(
                 "Abra **🧠 Entenda a decisão** "
                 "para visualizar a explicação individual."
@@ -1513,7 +1926,7 @@ if not modo_admin:
 
 
     # =====================================================
-    # ABA ENTENDA A DECISÃO
+    # ABA — ENTENDA A DECISÃO
     # =====================================================
 
     with aba_explicacao:
@@ -1541,7 +1954,6 @@ if not modo_admin:
 
         else:
 
-
             prob_explicacao = float(
                 ultima_predicao[
                     "probabilidade"
@@ -1557,7 +1969,9 @@ if not modo_admin:
 
 
             col1, col2, col3 = (
-                st.columns(3)
+                st.columns(
+                    3
+                )
             )
 
 
@@ -1585,6 +1999,10 @@ if not modo_admin:
                 )
 
 
+            # =============================================
+            # SHAP
+            # =============================================
+
             dados_explicacao = (
                 ultima_predicao[
                     "dados"
@@ -1594,7 +2012,9 @@ if not modo_admin:
 
             paciente_explicacao = (
                 pd.DataFrame(
-                    [dados_explicacao],
+                    [
+                        dados_explicacao
+                    ],
                     columns=predictors,
                 )
             )
@@ -1611,7 +2031,9 @@ if not modo_admin:
 
                 top_shap = (
                     tabela_shap
-                    .head(10)
+                    .head(
+                        10
+                    )
                     .copy()
                 )
 
@@ -1620,7 +2042,8 @@ if not modo_admin:
                     top_shap[
                         top_shap[
                             "valor_shap"
-                        ] > 0
+                        ]
+                        > 0
                     ]
                     .sort_values(
                         "valor_shap",
@@ -1633,7 +2056,8 @@ if not modo_admin:
                     top_shap[
                         top_shap[
                             "valor_shap"
-                        ] < 0
+                        ]
+                        < 0
                     ]
                     .sort_values(
                         "valor_shap",
@@ -1643,7 +2067,9 @@ if not modo_admin:
 
 
                 col_a, col_r = (
-                    st.columns(2)
+                    st.columns(
+                        2
+                    )
                 )
 
 
@@ -1658,12 +2084,22 @@ if not modo_admin:
                         )
 
 
-                        for _, linha in aumentam.iterrows():
+                        if aumentam.empty:
 
-                            st.write(
-                                f"• **{linha['variavel']}**: "
-                                f"{linha['valor_informado']}"
+                            st.caption(
+                                "Nenhuma das principais variáveis "
+                                "apresentou contribuição positiva."
                             )
+
+
+                        else:
+
+                            for _, linha in aumentam.iterrows():
+
+                                st.write(
+                                    f"• **{linha['variavel']}**: "
+                                    f"{linha['valor_informado']}"
+                                )
 
 
                 with col_r:
@@ -1677,13 +2113,27 @@ if not modo_admin:
                         )
 
 
-                        for _, linha in reduzem.iterrows():
+                        if reduzem.empty:
 
-                            st.write(
-                                f"• **{linha['variavel']}**: "
-                                f"{linha['valor_informado']}"
+                            st.caption(
+                                "Nenhuma das principais variáveis "
+                                "apresentou contribuição negativa."
                             )
 
+
+                        else:
+
+                            for _, linha in reduzem.iterrows():
+
+                                st.write(
+                                    f"• **{linha['variavel']}**: "
+                                    f"{linha['valor_informado']}"
+                                )
+
+
+                # -----------------------------------------
+                # GRÁFICO
+                # -----------------------------------------
 
                 import matplotlib.pyplot as plt
 
@@ -1711,7 +2161,10 @@ if not modo_admin:
 
 
                 fig, ax = plt.subplots(
-                    figsize=(9, 6)
+                    figsize=(
+                        9,
+                        6,
+                    )
                 )
 
 
@@ -1734,6 +2187,11 @@ if not modo_admin:
                 )
 
 
+                ax.set_ylabel(
+                    ""
+                )
+
+
                 ax.set_title(
                     "Contribuição das variáveis clínicas"
                 )
@@ -1750,6 +2208,13 @@ if not modo_admin:
 
                 plt.close(
                     fig
+                )
+
+
+                st.caption(
+                    "Valores à direita de zero contribuíram "
+                    "para maior risco estimado. Valores à esquerda "
+                    "contribuíram para menor risco estimado."
                 )
 
 
@@ -1775,12 +2240,12 @@ if not modo_admin:
                     )
 
 
+            # =============================================
+            # DCA
+            # =============================================
+
             st.divider()
 
-
-            # =================================================
-            # UTILIDADE CLÍNICA / DCA
-            # =================================================
 
             st.markdown(
                 "## 📈 Utilidade clínica da decisão"
@@ -1811,12 +2276,13 @@ if not modo_admin:
 
 
 # =========================================================
-# ÁREA ADMINISTRATIVA — AUDITORIA
+# ADMIN — AUDITORIA
 # =========================================================
 
 elif (
     admin_autenticado
-    and pagina_admin
+    and
+    pagina_admin
     == "📋 Auditoria"
 ):
 
@@ -1831,17 +2297,18 @@ elif (
     )
 
 
-    prontuario_busca = st.text_input(
-        "Prontuário",
-        key="auditoria_prontuario",
-        placeholder="Digite o prontuário",
+    prontuario_busca = (
+        st.text_input(
+            "Prontuário",
+            key="auditoria_prontuario",
+            placeholder="Digite o prontuário",
+        )
     )
 
 
     if st.button(
         "🔍 Buscar predição"
     ):
-
 
         st.session_state.pop(
             "registro_auditoria",
@@ -1858,7 +2325,6 @@ elif (
 
         else:
 
-
             try:
 
                 resposta = (
@@ -1866,7 +2332,9 @@ elif (
                     .table(
                         "auditoria_predicoes"
                     )
-                    .select("*")
+                    .select(
+                        "*"
+                    )
                     .eq(
                         "prontuario",
                         prontuario_busca.strip(),
@@ -1890,7 +2358,12 @@ elif (
 
                     st.session_state[
                         "registro_auditoria"
-                    ] = registros[0]
+                    ] = (
+                        registros[
+                            0
+                        ]
+                    )
+
 
                 else:
 
@@ -1942,19 +2415,34 @@ elif (
         )
 
 
-        st.metric(
-            "Probabilidade prevista",
-            f"{float(registro_auditoria['probabilidade']):.1%}",
+        col1, col2 = (
+            st.columns(
+                2
+            )
         )
 
 
-        st.metric(
-            "Classificação prevista",
-            registro_auditoria[
-                "classificacao_prevista"
-            ],
-        )
+        with col1:
 
+            st.metric(
+                "Probabilidade prevista",
+                f"{float(registro_auditoria['probabilidade']):.1%}",
+            )
+
+
+        with col2:
+
+            st.metric(
+                "Classificação prevista",
+                registro_auditoria[
+                    "classificacao_prevista"
+                ],
+            )
+
+
+        # -------------------------------------------------
+        # JÁ AUDITADO
+        # -------------------------------------------------
 
         if (
             registro_auditoria.get(
@@ -1962,14 +2450,15 @@ elif (
             )
         ):
 
-
             st.info(
                 "Este caso já foi auditado."
             )
 
 
             col1, col2, col3 = (
-                st.columns(3)
+                st.columns(
+                    3
+                )
             )
 
 
@@ -2003,20 +2492,24 @@ elif (
                 )
 
 
+        # -------------------------------------------------
+        # REGISTRAR ALTA
+        # -------------------------------------------------
+
         else:
 
-
-            data_alta = st.date_input(
-                "Data da alta",
-                value=None,
-                min_value=data_cirurgia_registro,
-                format="DD/MM/YYYY",
-                key="auditoria_data_alta",
+            data_alta = (
+                st.date_input(
+                    "Data da alta",
+                    value=None,
+                    min_value=data_cirurgia_registro,
+                    format="DD/MM/YYYY",
+                    key="auditoria_data_alta",
+                )
             )
 
 
             if data_alta is not None:
-
 
                 dias_reais = (
                     data_alta
@@ -2024,20 +2517,31 @@ elif (
                 ).days
 
 
-                st.metric(
-                    "Cirurgia → alta",
-                    f"{dias_reais} dias",
+                col1, col2 = (
+                    st.columns(
+                        2
+                    )
                 )
 
 
-                st.metric(
-                    "Desfecho calculado",
-                    (
-                        "Prolongada"
-                        if dias_reais > 7
-                        else "Não prolongada"
-                    ),
-                )
+                with col1:
+
+                    st.metric(
+                        "Cirurgia → alta",
+                        f"{dias_reais} dias",
+                    )
+
+
+                with col2:
+
+                    st.metric(
+                        "Desfecho calculado",
+                        (
+                            "Prolongada"
+                            if dias_reais > 7
+                            else "Não prolongada"
+                        ),
+                    )
 
 
                 if st.button(
@@ -2045,7 +2549,6 @@ elif (
                     type="primary",
                     use_container_width=True,
                 ):
-
 
                     (
                         desfecho_real,
@@ -2126,12 +2629,13 @@ elif (
 
 
 # =========================================================
-# ÁREA ADMINISTRATIVA — DESEMPENHO
+# ADMIN — DESEMPENHO
 # =========================================================
 
 elif (
     admin_autenticado
-    and pagina_admin
+    and
+    pagina_admin
     == "📊 Desempenho do modelo"
 ):
 
@@ -2151,7 +2655,6 @@ elif (
         "🔄 Carregar / atualizar indicadores"
     ):
 
-
         with st.spinner(
             "Consultando banco de auditoria..."
         ):
@@ -2162,9 +2665,12 @@ elif (
                     carregar_todos_registros()
                 )
 
+
                 st.session_state[
                     "dados_desempenho"
-                ] = registros
+                ] = (
+                    registros
+                )
 
 
             except Exception as exc:
@@ -2194,7 +2700,6 @@ elif (
 
     else:
 
-
         df = pd.DataFrame(
             registros
         )
@@ -2216,27 +2721,38 @@ elif (
                         df[
                             "desfecho_real"
                         ]
-                        .astype(str)
-                        .str.strip()
+                        .astype(
+                            str
+                        )
+                        .str
+                        .strip()
                         != ""
                     )
                 ]
                 .copy()
             )
 
+
         else:
 
-            auditados = pd.DataFrame()
+            auditados = (
+                pd.DataFrame()
+            )
 
 
-        total = len(df)
+        total = len(
+            df
+        )
+
         total_auditados = len(
             auditados
         )
 
 
         col1, col2, col3 = (
-            st.columns(3)
+            st.columns(
+                3
+            )
         )
 
 
@@ -2275,37 +2791,67 @@ elif (
 
         else:
 
-
             tipos = (
                 auditados[
                     "tipo_resultado"
                 ]
-                .fillna("")
-                .astype(str)
-                .str.upper()
-                .str.strip()
+                .fillna(
+                    ""
+                )
+                .astype(
+                    str
+                )
+                .str
+                .upper()
+                .str
+                .strip()
             )
 
 
             vp = int(
-                (tipos == "VP").sum()
+                (
+                    tipos
+                    == "VP"
+                )
+                .sum()
             )
+
 
             vn = int(
-                (tipos == "VN").sum()
+                (
+                    tipos
+                    == "VN"
+                )
+                .sum()
             )
+
 
             fp = int(
-                (tipos == "FP").sum()
+                (
+                    tipos
+                    == "FP"
+                )
+                .sum()
             )
+
 
             fn = int(
-                (tipos == "FN").sum()
+                (
+                    tipos
+                    == "FN"
+                )
+                .sum()
             )
 
 
+            # ---------------------------------------------
+            # VP VN FP FN
+            # ---------------------------------------------
+
             col1, col2, col3, col4 = (
-                st.columns(4)
+                st.columns(
+                    4
+                )
             )
 
 
@@ -2340,6 +2886,10 @@ elif (
                     fn,
                 )
 
+
+            # ---------------------------------------------
+            # MÉTRICAS
+            # ---------------------------------------------
 
             sensibilidade = dividir_seguro(
                 vp,
@@ -2377,7 +2927,9 @@ elif (
 
 
             col1, col2, col3 = (
-                st.columns(3)
+                st.columns(
+                    3
+                )
             )
 
 
@@ -2412,7 +2964,9 @@ elif (
 
 
             col4, col5 = (
-                st.columns(2)
+                st.columns(
+                    2
+                )
             )
 
 
@@ -2435,6 +2989,10 @@ elif (
                     ),
                 )
 
+
+            # ---------------------------------------------
+            # MATRIZ
+            # ---------------------------------------------
 
             matriz = pd.DataFrame(
                 [
@@ -2470,12 +3028,13 @@ elif (
 
 
 # =========================================================
-# ÁREA ADMINISTRATIVA — CSV
+# ADMIN — CSV
 # =========================================================
 
 elif (
     admin_autenticado
-    and pagina_admin
+    and
+    pagina_admin
     == "📥 Gerar planilha CSV"
 ):
 
@@ -2502,11 +3061,9 @@ elif (
         use_container_width=True,
     ):
 
-
         with st.spinner(
             "Consultando banco de dados..."
         ):
-
 
             try:
 
@@ -2547,7 +3104,6 @@ elif (
 
     else:
 
-
         df_csv = pd.DataFrame(
             registros_csv
         )
@@ -2558,6 +3114,10 @@ elif (
             f"{len(df_csv)} registros."
         )
 
+
+        # -------------------------------------------------
+        # ORDEM DAS COLUNAS
+        # -------------------------------------------------
 
         colunas_prioritarias = [
             "id",
@@ -2618,6 +3178,10 @@ elif (
         )
 
 
+        # -------------------------------------------------
+        # VISUALIZAR
+        # -------------------------------------------------
+
         with st.expander(
             "Visualizar registros"
         ):
@@ -2628,6 +3192,10 @@ elif (
                 hide_index=True,
             )
 
+
+        # -------------------------------------------------
+        # CSV
+        # -------------------------------------------------
 
         csv_completo = (
             df_exportacao

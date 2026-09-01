@@ -28,7 +28,7 @@ BUNDLE_PATH = Path(__file__).with_name(
 
 
 # =========================================================
-# LIMPAR NOVO CADASTRO
+# NOVO CADASTRO
 # =========================================================
 
 def limpar_novo_cadastro():
@@ -85,12 +85,15 @@ st.markdown(
 
 
 # =========================================================
-# CARREGAMENTO DO MODELO
+# MODELO
 # =========================================================
 
 @st.cache_resource
 def carregar_bundle():
-    return joblib.load(BUNDLE_PATH)
+
+    return joblib.load(
+        BUNDLE_PATH
+    )
 
 
 bundle = carregar_bundle()
@@ -100,6 +103,7 @@ predictors = bundle["predictors"]
 schema = bundle.get("ui_schema", {})
 threshold = bundle.get("clinical_threshold")
 family = bundle.get("family", "Modelo")
+
 sensibilidade_meta = bundle.get(
     "min_sensitivity_target"
 )
@@ -110,6 +114,7 @@ if threshold is None:
     st.error(
         "O bundle não possui threshold operacional definido."
     )
+
     st.stop()
 
 
@@ -138,12 +143,13 @@ except Exception as exc:
     st.error(
         "Não foi possível conectar ao banco de auditoria."
     )
+
     st.exception(exc)
     st.stop()
 
 
 # =========================================================
-# CARREGAR TODOS OS REGISTROS DO SUPABASE
+# CONSULTAR BASE COMPLETA
 # =========================================================
 
 def carregar_todos_registros():
@@ -155,11 +161,17 @@ def carregar_todos_registros():
 
     while True:
 
-        fim = inicio + tamanho_lote - 1
+        fim = (
+            inicio
+            + tamanho_lote
+            - 1
+        )
 
         resposta = (
             supabase
-            .table("auditoria_predicoes")
+            .table(
+                "auditoria_predicoes"
+            )
             .select("*")
             .order(
                 "data_predicao",
@@ -178,7 +190,9 @@ def carregar_todos_registros():
             else []
         )
 
-        todos.extend(lote)
+        todos.extend(
+            lote
+        )
 
         if len(lote) < tamanho_lote:
             break
@@ -189,7 +203,7 @@ def carregar_todos_registros():
 
 
 # =========================================================
-# CATEGORIAS
+# NOMES E CATEGORIAS
 # =========================================================
 
 mapa_exibicao = {
@@ -214,11 +228,11 @@ nomes_clinicos = {
     "sexo_int":
         "Sexo",
 
-    "idade_anos_diag":
-        "Idade ao diagnóstico",
-
     "f_idade_anos_int":
         "Idade",
+
+    "idade_anos_diag":
+        "Idade ao diagnóstico",
 
     "f_asa":
         "Classificação ASA",
@@ -269,55 +283,44 @@ def formatar_categoria(valor):
     )
 
 
-def nome_feature_shap(nome):
+def formatar_valor_paciente(
+    feature,
+    valor,
+):
 
-    nome = (
-        str(nome)
-        .replace("num__", "")
-        .replace("cat__", "")
-        .replace("nom__", "")
+    if valor is None:
+        return "Não informado"
+
+    meta = schema.get(
+        feature,
+        {},
     )
 
-    for variavel_original, nome_clinico in sorted(
-        nomes_clinicos.items(),
-        key=lambda x: len(x[0]),
-        reverse=True,
+    if (
+        meta.get("type")
+        == "categorical"
     ):
 
-        if nome == variavel_original:
-            return nome_clinico
+        return formatar_categoria(
+            valor
+        )
 
-        if nome.startswith(
-            variavel_original + "_"
-        ):
+    if isinstance(
+        valor,
+        float,
+    ):
 
-            categoria = nome[
-                len(variavel_original) + 1:
-            ]
+        if valor.is_integer():
 
-            categoria = (
-                categoria
-                .replace("_", " ")
-                .strip()
+            return str(
+                int(valor)
             )
 
-            categoria = formatar_categoria(
-                categoria
-            )
-
-            return (
-                f"{nome_clinico}: {categoria}"
-            )
-
-    return (
-        nome
-        .replace("_", " ")
-        .capitalize()
-    )
+    return str(valor)
 
 
 # =========================================================
-# CAMPOS DE ENTRADA
+# CAMPOS
 # =========================================================
 
 valores = {}
@@ -436,14 +439,24 @@ def calcular_auditoria(
 ):
 
     if dias_reais > 7:
-        desfecho_real = "Prolongada"
+
+        desfecho_real = (
+            "Prolongada"
+        )
+
     else:
-        desfecho_real = "Não prolongada"
+
+        desfecho_real = (
+            "Não prolongada"
+        )
 
 
     if (
-        classificacao_prevista == "Alto risco"
-        and desfecho_real == "Prolongada"
+        classificacao_prevista
+        == "Alto risco"
+        and
+        desfecho_real
+        == "Prolongada"
     ):
 
         return (
@@ -454,8 +467,11 @@ def calcular_auditoria(
 
 
     elif (
-        classificacao_prevista == "Baixo risco"
-        and desfecho_real == "Não prolongada"
+        classificacao_prevista
+        == "Baixo risco"
+        and
+        desfecho_real
+        == "Não prolongada"
     ):
 
         return (
@@ -466,8 +482,11 @@ def calcular_auditoria(
 
 
     elif (
-        classificacao_prevista == "Alto risco"
-        and desfecho_real == "Não prolongada"
+        classificacao_prevista
+        == "Alto risco"
+        and
+        desfecho_real
+        == "Não prolongada"
     ):
 
         return (
@@ -487,7 +506,7 @@ def calcular_auditoria(
 
 
 # =========================================================
-# DIVISÃO SEGURA PARA MÉTRICAS
+# MÉTRICAS
 # =========================================================
 
 def dividir_seguro(
@@ -504,7 +523,9 @@ def dividir_seguro(
     )
 
 
-def mostrar_percentual(valor):
+def mostrar_percentual(
+    valor
+):
 
     if valor is None:
         return "—"
@@ -513,7 +534,49 @@ def mostrar_percentual(valor):
 
 
 # =========================================================
-# SHAP
+# IDENTIFICAR VARIÁVEL ORIGINAL DO ONE-HOT
+# =========================================================
+
+def identificar_variavel_original(
+    feature_transformada
+):
+
+    nome = str(
+        feature_transformada
+    )
+
+    nome = (
+        nome
+        .replace("num__", "")
+        .replace("cat__", "")
+        .replace("nom__", "")
+    )
+
+
+    # Ordenação por tamanho evita confusão
+    # entre nomes semelhantes
+    for original in sorted(
+        predictors,
+        key=len,
+        reverse=True,
+    ):
+
+        if nome == original:
+
+            return original
+
+        if nome.startswith(
+            original + "_"
+        ):
+
+            return original
+
+
+    return nome
+
+
+# =========================================================
+# SHAP AGREGADO POR VARIÁVEL CLÍNICA
 # =========================================================
 
 def calcular_shap_individual(
@@ -522,14 +585,15 @@ def calcular_shap_individual(
 
     pipeline = model
 
+
     if not hasattr(
         pipeline,
         "named_steps",
     ):
 
         raise ValueError(
-            "O modelo salvo não possui pipeline "
-            "compatível com a explicação SHAP."
+            "O modelo salvo não possui pipeline compatível "
+            "com a explicação SHAP."
         )
 
 
@@ -559,6 +623,7 @@ def calcular_shap_individual(
         ]
     )
 
+
     modelo_shap = (
         pipeline.named_steps[
             "model"
@@ -566,13 +631,21 @@ def calcular_shap_individual(
     )
 
 
-    X_novo = novo_paciente[
-        predictors
-    ].copy()
+    # -----------------------------------------------------
+    # MESMO PRÉ-PROCESSAMENTO DO MODELO
+    # -----------------------------------------------------
+
+    X_novo = (
+        novo_paciente[
+            predictors
+        ]
+        .copy()
+    )
 
 
     X_proc = (
-        preprocessador.transform(
+        preprocessador
+        .transform(
             X_novo
         )
     )
@@ -582,7 +655,11 @@ def calcular_shap_individual(
         X_proc,
         "toarray",
     ):
-        X_proc = X_proc.toarray()
+
+        X_proc = (
+            X_proc
+            .toarray()
+        )
 
 
     nomes_features = (
@@ -592,11 +669,14 @@ def calcular_shap_individual(
 
 
     nomes_features_limpos = [
+
         str(nome)
         .replace("num__", "")
         .replace("cat__", "")
         .replace("nom__", "")
-        for nome in nomes_features
+
+        for nome
+        in nomes_features
     ]
 
 
@@ -606,10 +686,15 @@ def calcular_shap_individual(
     )
 
 
+    # -----------------------------------------------------
+    # COMPATIBILIDADE XGBOOST
+    # -----------------------------------------------------
+
     if hasattr(
         modelo_shap,
         "enable_categorical",
     ):
+
         modelo_shap.enable_categorical = False
 
 
@@ -617,6 +702,7 @@ def calcular_shap_individual(
         modelo_shap,
         "cat_feature_indices",
     ):
+
         modelo_shap.cat_feature_indices = None
 
 
@@ -624,8 +710,13 @@ def calcular_shap_individual(
         modelo_shap,
         "_xgb_enable_categorical",
     ):
+
         modelo_shap._xgb_enable_categorical = False
 
+
+    # -----------------------------------------------------
+    # SHAP
+    # -----------------------------------------------------
 
     explainer = shap.TreeExplainer(
         modelo_shap
@@ -652,11 +743,13 @@ def calcular_shap_individual(
             ]
         )
 
+
     elif valores_shap.ndim == 2:
 
         valores_shap = (
             valores_shap[0]
         )
+
 
     else:
 
@@ -666,38 +759,118 @@ def calcular_shap_individual(
         )
 
 
-    tabela = pd.DataFrame(
-        {
-            "feature":
-                nomes_features_limpos,
+    # -----------------------------------------------------
+    # TABELA DAS FEATURES TRANSFORMADAS
+    # -----------------------------------------------------
 
-            "feature_clinica":
-                [
-                    nome_feature_shap(
-                        x
-                    )
-                    for x
-                    in nomes_features_limpos
-                ],
+    tabela_transformada = (
+        pd.DataFrame(
+            {
+                "feature_transformada":
+                    nomes_features_limpos,
 
-            "valor_shap":
-                valores_shap,
-        }
+                "valor_shap":
+                    valores_shap,
+            }
+        )
     )
 
 
-    tabela[
+    # -----------------------------------------------------
+    # IDENTIFICA VARIÁVEL CLÍNICA ORIGINAL
+    # -----------------------------------------------------
+
+    tabela_transformada[
+        "feature_original"
+    ] = (
+        tabela_transformada[
+            "feature_transformada"
+        ]
+        .apply(
+            identificar_variavel_original
+        )
+    )
+
+
+    # -----------------------------------------------------
+    # AGREGA TODOS OS DUMMIES DA MESMA VARIÁVEL
+    # -----------------------------------------------------
+
+    tabela_agregada = (
+        tabela_transformada
+        .groupby(
+            "feature_original",
+            as_index=False,
+        )[
+            "valor_shap"
+        ]
+        .sum()
+    )
+
+
+    # -----------------------------------------------------
+    # NOME CLÍNICO
+    # -----------------------------------------------------
+
+    tabela_agregada[
+        "variavel"
+    ] = (
+        tabela_agregada[
+            "feature_original"
+        ]
+        .apply(
+            lambda x:
+                nomes_clinicos.get(
+                    x,
+                    str(x)
+                    .replace("_", " ")
+                    .capitalize(),
+                )
+        )
+    )
+
+
+    # -----------------------------------------------------
+    # VALOR REAL INFORMADO PELO USUÁRIO
+    # -----------------------------------------------------
+
+    valores_originais = (
+        novo_paciente
+        .iloc[0]
+        .to_dict()
+    )
+
+
+    tabela_agregada[
+        "valor_informado"
+    ] = (
+        tabela_agregada[
+            "feature_original"
+        ]
+        .apply(
+            lambda x:
+                formatar_valor_paciente(
+                    x,
+                    valores_originais.get(
+                        x
+                    ),
+                )
+        )
+    )
+
+
+    tabela_agregada[
         "impacto_absoluto"
     ] = (
-        tabela[
+        tabela_agregada[
             "valor_shap"
         ]
         .abs()
     )
 
 
-    tabela = (
-        tabela
+    tabela_agregada = (
+        tabela_agregada
         .sort_values(
             "impacto_absoluto",
             ascending=False,
@@ -708,7 +881,7 @@ def calcular_shap_individual(
     )
 
 
-    return tabela
+    return tabela_agregada
 
 
 # =========================================================
@@ -816,6 +989,7 @@ with aba_predicao:
         ):
 
             limpar_novo_cadastro()
+
             st.rerun()
 
 
@@ -911,7 +1085,7 @@ with aba_predicao:
 
 
     # -----------------------------------------------------
-    # DADOS
+    # DADOS PARA PREDIÇÃO
     # -----------------------------------------------------
 
     st.markdown(
@@ -1046,7 +1220,7 @@ with aba_predicao:
 
 
     # -----------------------------------------------------
-    # PREDITORES NÃO MAPEADOS
+    # OUTRAS VARIÁVEIS
     # -----------------------------------------------------
 
     faltantes = [
@@ -1075,7 +1249,7 @@ with aba_predicao:
 
 
     # -----------------------------------------------------
-    # CALCULAR
+    # PREDIÇÃO
     # -----------------------------------------------------
 
     st.write("")
@@ -1096,6 +1270,7 @@ with aba_predicao:
             st.warning(
                 "Informe o prontuário."
             )
+
             st.stop()
 
 
@@ -1104,6 +1279,7 @@ with aba_predicao:
             st.warning(
                 "Informe a data da internação."
             )
+
             st.stop()
 
 
@@ -1112,6 +1288,7 @@ with aba_predicao:
             st.warning(
                 "Informe a data da cirurgia."
             )
+
             st.stop()
 
 
@@ -1124,19 +1301,7 @@ with aba_predicao:
                 "A data da cirurgia não pode ser "
                 "anterior à data da internação."
             )
-            st.stop()
 
-
-        if (
-            tempo_int_cir_dias
-            is None
-        ):
-
-            st.error(
-                "Não foi possível calcular "
-                "o intervalo entre internação "
-                "e cirurgia."
-            )
             st.stop()
 
 
@@ -1146,6 +1311,10 @@ with aba_predicao:
             tempo_int_cir_dias
         )
 
+
+        # -------------------------------------------------
+        # CAMPOS PENDENTES
+        # -------------------------------------------------
 
         campos_faltantes = []
 
@@ -1170,7 +1339,7 @@ with aba_predicao:
                 )
             ):
 
-                label = (
+                campos_faltantes.append(
                     schema
                     .get(
                         feature,
@@ -1186,21 +1355,11 @@ with aba_predicao:
                 )
 
 
-                campos_faltantes.append(
-                    label
-                )
-
-
         if campos_faltantes:
 
             st.error(
                 "Preencha todos os campos "
                 "antes de calcular a predição."
-            )
-
-
-            st.write(
-                "**Campos pendentes:**"
             )
 
 
@@ -1214,13 +1373,19 @@ with aba_predicao:
             st.stop()
 
 
-        novo_paciente = (
-            pd.DataFrame(
-                [valores],
-                columns=predictors,
-            )
+        # -------------------------------------------------
+        # DATAFRAME
+        # -------------------------------------------------
+
+        novo_paciente = pd.DataFrame(
+            [valores],
+            columns=predictors,
         )
 
+
+        # -------------------------------------------------
+        # PROBABILIDADE
+        # -------------------------------------------------
 
         try:
 
@@ -1230,6 +1395,7 @@ with aba_predicao:
                 )[0, 1]
             )
 
+
         except Exception as exc:
 
             st.error(
@@ -1237,7 +1403,10 @@ with aba_predicao:
                 "a predição."
             )
 
-            st.exception(exc)
+            st.exception(
+                exc
+            )
+
             st.stop()
 
 
@@ -1252,6 +1421,10 @@ with aba_predicao:
             uuid4()
         )
 
+
+        # -------------------------------------------------
+        # REGISTRO SUPABASE
+        # -------------------------------------------------
 
         registro = {
 
@@ -1324,6 +1497,7 @@ with aba_predicao:
                 .execute()
             )
 
+
         except Exception as exc:
 
             st.error(
@@ -1332,9 +1506,16 @@ with aba_predicao:
                 "no banco de auditoria."
             )
 
-            st.exception(exc)
+            st.exception(
+                exc
+            )
+
             st.stop()
 
+
+        # -------------------------------------------------
+        # GUARDA PARA EXPLICAÇÃO SHAP
+        # -------------------------------------------------
 
         st.session_state[
             "ultima_predicao"
@@ -1358,6 +1539,10 @@ with aba_predicao:
                 )[0],
         }
 
+
+        # -------------------------------------------------
+        # RESULTADO
+        # -------------------------------------------------
 
         st.markdown(
             "## Resultado da predição"
@@ -1527,7 +1712,9 @@ with aba_auditoria:
                     "o banco de auditoria."
                 )
 
-                st.exception(exc)
+                st.exception(
+                    exc
+                )
 
 
     registro_auditoria = (
@@ -1550,6 +1737,7 @@ with aba_auditoria:
         ):
 
             data_cirurgia_registro = None
+
 
             col1, col2 = (
                 st.columns(2)
@@ -1633,7 +1821,7 @@ with aba_auditoria:
 
 
         # -------------------------------------------------
-        # JÁ AUDITADO
+        # CASO AUDITADO
         # -------------------------------------------------
 
         if (
@@ -1722,27 +1910,6 @@ with aba_auditoria:
                     )
 
 
-                if (
-                    registro_auditoria[
-                        "predicao"
-                    ]
-                    == "Modelo acertou"
-                ):
-
-                    st.success(
-                        "✅ Modelo acertou "
-                        "a classificação."
-                    )
-
-
-                else:
-
-                    st.error(
-                        "❌ Modelo errou "
-                        "a classificação."
-                    )
-
-
         # -------------------------------------------------
         # REGISTRAR ALTA
         # -------------------------------------------------
@@ -1781,10 +1948,8 @@ with aba_auditoria:
                 )
 
 
-                if (
-                    data_alta
-                    is not None
-                ):
+                if data_alta is not None:
+
 
                     dias_reais = (
                         data_alta
@@ -1828,6 +1993,7 @@ with aba_auditoria:
 
                     if salvar_desfecho:
 
+
                         (
                             desfecho_real,
                             tipo_resultado,
@@ -1836,9 +2002,7 @@ with aba_auditoria:
                             registro_auditoria[
                                 "classificacao_prevista"
                             ],
-                            int(
-                                dias_reais
-                            ),
+                            dias_reais,
                         )
 
 
@@ -1848,7 +2012,7 @@ with aba_auditoria:
                                 data_alta.isoformat(),
 
                             "dias_reais_internacao":
-                                int(dias_reais),
+                                dias_reais,
 
                             "desfecho_real":
                                 desfecho_real,
@@ -1892,54 +2056,6 @@ with aba_auditoria:
                             )
 
 
-                            col1, col2, col3 = (
-                                st.columns(3)
-                            )
-
-
-                            with col1:
-
-                                st.metric(
-                                    "Desfecho",
-                                    desfecho_real,
-                                )
-
-
-                            with col2:
-
-                                st.metric(
-                                    "Tipo",
-                                    tipo_resultado,
-                                )
-
-
-                            with col3:
-
-                                st.metric(
-                                    "Predição",
-                                    resultado_predicao,
-                                )
-
-
-                            if (
-                                resultado_predicao
-                                == "Modelo acertou"
-                            ):
-
-                                st.success(
-                                    "✅ Modelo acertou "
-                                    "a classificação deste caso."
-                                )
-
-
-                            else:
-
-                                st.error(
-                                    "❌ Modelo errou "
-                                    "a classificação deste caso."
-                                )
-
-
                             st.session_state.pop(
                                 "registro_auditoria",
                                 None,
@@ -1953,15 +2069,9 @@ with aba_auditoria:
                                 "o registro."
                             )
 
-                            st.exception(exc)
-
-
-                else:
-
-                    st.caption(
-                        "Informe a data da alta "
-                        "para realizar a auditoria."
-                    )
+                            st.exception(
+                                exc
+                            )
 
 
 # =========================================================
@@ -1993,6 +2103,7 @@ with aba_explicacao:
 
     else:
 
+
         prob_explicacao = float(
             ultima_predicao[
                 "probabilidade"
@@ -2004,6 +2115,15 @@ with aba_explicacao:
             ultima_predicao[
                 "classificacao"
             ]
+        )
+
+
+        # -------------------------------------------------
+        # RESULTADO
+        # -------------------------------------------------
+
+        st.markdown(
+            "### Resultado analisado"
         )
 
 
@@ -2039,9 +2159,9 @@ with aba_explicacao:
         st.divider()
 
 
-        # -------------------------------------------------
+        # =================================================
         # SHAP
-        # -------------------------------------------------
+        # =================================================
 
         st.markdown(
             "### 🔍 Como o modelo chegou a esta previsão?"
@@ -2049,9 +2169,11 @@ with aba_explicacao:
 
 
         st.write(
-            "O SHAP estima quanto cada variável "
-            "contribuiu para deslocar a previsão "
-            "em direção a maior ou menor risco."
+            "O SHAP estima a contribuição das variáveis "
+            "para esta predição individual. Nesta tela, "
+            "as contribuições das categorias criadas pelo "
+            "pré-processamento foram reunidas novamente "
+            "por variável clínica original."
         )
 
 
@@ -2079,9 +2201,20 @@ with aba_explicacao:
             )
 
 
+            # =================================================
+            # MESMAS VARIÁVEIS PARA GRÁFICO E QUADROS
+            # =================================================
+
+            top_shap = (
+                tabela_shap
+                .head(10)
+                .copy()
+            )
+
+
             aumentam = (
-                tabela_shap[
-                    tabela_shap[
+                top_shap[
+                    top_shap[
                         "valor_shap"
                     ] > 0
                 ]
@@ -2089,13 +2222,12 @@ with aba_explicacao:
                     "valor_shap",
                     ascending=False,
                 )
-                .head(5)
             )
 
 
             reduzem = (
-                tabela_shap[
-                    tabela_shap[
+                top_shap[
+                    top_shap[
                         "valor_shap"
                     ] < 0
                 ]
@@ -2103,9 +2235,12 @@ with aba_explicacao:
                     "valor_shap",
                     ascending=True,
                 )
-                .head(5)
             )
 
+
+            # -------------------------------------------------
+            # QUADROS
+            # -------------------------------------------------
 
             col_a, col_r = (
                 st.columns(2)
@@ -2119,16 +2254,26 @@ with aba_explicacao:
                 ):
 
                     st.markdown(
-                        "#### ⬆️ Aumentaram a estimativa"
+                        "#### ⬆️ Contribuíram para maior risco estimado"
                     )
 
 
-                    for _, linha in aumentam.iterrows():
+                    if aumentam.empty:
 
-                        st.write(
-                            "• "
-                            f"{linha['feature_clinica']}"
+                        st.caption(
+                            "Nenhuma das principais variáveis "
+                            "apresentou contribuição positiva."
                         )
+
+
+                    else:
+
+                        for _, linha in aumentam.iterrows():
+
+                            st.write(
+                                f"• **{linha['variavel']}**: "
+                                f"{linha['valor_informado']}"
+                            )
 
 
             with col_r:
@@ -2138,27 +2283,57 @@ with aba_explicacao:
                 ):
 
                     st.markdown(
-                        "#### ⬇️ Reduziram a estimativa"
+                        "#### ⬇️ Contribuíram para menor risco estimado"
                     )
 
 
-                    for _, linha in reduzem.iterrows():
+                    if reduzem.empty:
 
-                        st.write(
-                            "• "
-                            f"{linha['feature_clinica']}"
+                        st.caption(
+                            "Nenhuma das principais variáveis "
+                            "apresentou contribuição negativa."
                         )
 
 
+                    else:
+
+                        for _, linha in reduzem.iterrows():
+
+                            st.write(
+                                f"• **{linha['variavel']}**: "
+                                f"{linha['valor_informado']}"
+                            )
+
+
+            # =================================================
+            # GRÁFICO — EXATAMENTE O MESMO TOP 10
+            # =================================================
+
+            st.markdown(
+                "### Principais contribuições para esta predição"
+            )
+
+
             top_plot = (
-                tabela_shap
-                .head(10)
-                .copy()
+                top_shap
                 .sort_values(
                     "valor_shap",
                     ascending=True,
                 )
+                .copy()
             )
+
+
+            labels_plot = [
+
+                (
+                    f"{linha['variavel']} "
+                    f"({linha['valor_informado']})"
+                )
+
+                for _, linha
+                in top_plot.iterrows()
+            ]
 
 
             fig, ax = plt.subplots(
@@ -2167,9 +2342,7 @@ with aba_explicacao:
 
 
             ax.barh(
-                top_plot[
-                    "feature_clinica"
-                ],
+                labels_plot,
                 top_plot[
                     "valor_shap"
                 ],
@@ -2183,12 +2356,17 @@ with aba_explicacao:
 
 
             ax.set_xlabel(
-                "Valor SHAP"
+                "Valor SHAP agregado"
+            )
+
+
+            ax.set_ylabel(
+                ""
             )
 
 
             ax.set_title(
-                "Principais contribuições para esta predição"
+                "Contribuição das variáveis clínicas para a predição"
             )
 
 
@@ -2207,24 +2385,60 @@ with aba_explicacao:
 
 
             st.caption(
-                "Valores SHAP positivos aumentam "
-                "a estimativa de risco; valores negativos "
-                "reduzem a estimativa."
+                "Valores à direita de zero contribuíram "
+                "para maior risco estimado. Valores à esquerda "
+                "contribuíram para menor risco estimado."
             )
 
 
             st.warning(
-                "SHAP explica a contribuição das variáveis "
-                "para esta predição. Não representa causalidade."
+                "A explicação SHAP descreve como o modelo "
+                "construiu esta predição específica. "
+                "Ela não demonstra que uma variável cause "
+                "internação prolongada."
             )
+
+
+            # -------------------------------------------------
+            # TABELA COMPLETA
+            # -------------------------------------------------
+
+            with st.expander(
+                "Ver contribuições SHAP por variável"
+            ):
+
+
+                tabela_exibicao = (
+                    tabela_shap[
+                        [
+                            "variavel",
+                            "valor_informado",
+                            "valor_shap",
+                        ]
+                    ]
+                    .copy()
+                )
+
+
+                tabela_exibicao.columns = [
+                    "Variável",
+                    "Valor informado",
+                    "Valor SHAP agregado",
+                ]
+
+
+                st.dataframe(
+                    tabela_exibicao,
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
 
         except Exception as exc:
 
             st.warning(
-                "A predição foi realizada, "
-                "mas não foi possível gerar "
-                "a explicação SHAP."
+                "A predição foi realizada normalmente, "
+                "mas não foi possível gerar a explicação SHAP."
             )
 
 
@@ -2237,9 +2451,9 @@ with aba_explicacao:
                 )
 
 
-        # -------------------------------------------------
+        # =================================================
         # DCA
-        # -------------------------------------------------
+        # =================================================
 
         st.divider()
 
@@ -2276,19 +2490,18 @@ with aba_explicacao:
                 "Meta de sensibilidade",
                 (
                     f"{sensibilidade_meta:.0%}"
-                    if sensibilidade_meta
-                    is not None
+                    if sensibilidade_meta is not None
                     else "80%"
                 ),
             )
 
 
         st.info(
-            "Na amostra de desenvolvimento, "
-            "o modelo apresentou benefício líquido "
-            "superior às estratégias de tratar todos "
-            "e tratar ninguém em uma faixa contínua "
-            "de thresholds entre **21% e 80%**."
+            "Na amostra de desenvolvimento, o modelo "
+            "apresentou benefício líquido superior às "
+            "estratégias de tratar todos e tratar ninguém "
+            "em uma faixa contínua de thresholds entre "
+            "**21% e 80%**."
         )
 
 
@@ -2303,14 +2516,12 @@ with aba_explicacao:
 
         st.write(
             f"O threshold operacional de **{threshold:.0%}** "
-            "está dentro dessa faixa e foi selecionado "
-            "considerando a meta mínima de sensibilidade "
-            "e o benefício líquido pela DCA."
+            "encontra-se dentro dessa faixa."
         )
 
 
 # =========================================================
-# ABA 4 — DESEMPENHO DO MODELO
+# ABA 4 — DESEMPENHO
 # =========================================================
 
 with aba_desempenho:
@@ -2322,14 +2533,13 @@ with aba_desempenho:
 
 
     st.write(
-        "Esta área acompanha o desempenho do modelo "
-        "nos casos registrados prospectivamente."
+        "As métricas abaixo são calculadas apenas "
+        "com pacientes cujo desfecho já foi registrado."
     )
 
 
     if st.button(
-        "🔄 Atualizar indicadores",
-        use_container_width=False,
+        "🔄 Atualizar indicadores"
     ):
 
         st.rerun()
@@ -2342,8 +2552,10 @@ with aba_desempenho:
         )
 
 
-        df_completo = pd.DataFrame(
-            registros_completos
+        df_completo = (
+            pd.DataFrame(
+                registros_completos
+            )
         )
 
 
@@ -2354,14 +2566,14 @@ with aba_desempenho:
             "a base de auditoria."
         )
 
-        st.exception(exc)
+        st.exception(
+            exc
+        )
 
-        df_completo = pd.DataFrame()
+        df_completo = (
+            pd.DataFrame()
+        )
 
-
-    # =====================================================
-    # SEM REGISTROS
-    # =====================================================
 
     if df_completo.empty:
 
@@ -2372,8 +2584,9 @@ with aba_desempenho:
 
     else:
 
+
         # -------------------------------------------------
-        # IDENTIFICAÇÃO DOS CASOS AUDITADOS
+        # AUDITADOS
         # -------------------------------------------------
 
         if (
@@ -2397,13 +2610,12 @@ with aba_desempenho:
                 )
             )
 
+
         else:
 
-            mascara_auditados = (
-                pd.Series(
-                    False,
-                    index=df_completo.index,
-                )
+            mascara_auditados = pd.Series(
+                False,
+                index=df_completo.index,
             )
 
 
@@ -2428,15 +2640,6 @@ with aba_desempenho:
         total_pendentes = (
             total_predicoes
             - total_auditados
-        )
-
-
-        # =================================================
-        # RESUMO OPERACIONAL
-        # =================================================
-
-        st.markdown(
-            "### Acompanhamento dos registros"
         )
 
 
@@ -2469,24 +2672,8 @@ with aba_desempenho:
             )
 
 
-        # =================================================
-        # SOMENTE CASOS AUDITADOS
-        # =================================================
+        if not df_auditados.empty:
 
-        if df_auditados.empty:
-
-            st.warning(
-                "Ainda não há casos com desfecho registrado. "
-                "As métricas de desempenho serão calculadas "
-                "quando houver auditorias concluídas."
-            )
-
-
-        else:
-
-            # ---------------------------------------------
-            # VP VN FP FN
-            # ---------------------------------------------
 
             tipos = (
                 df_auditados[
@@ -2531,10 +2718,6 @@ with aba_desempenho:
                 st.metric(
                     "VP",
                     vp,
-                    help=(
-                        "Verdadeiro positivo: "
-                        "alto risco e internação prolongada."
-                    ),
                 )
 
 
@@ -2543,10 +2726,6 @@ with aba_desempenho:
                 st.metric(
                     "VN",
                     vn,
-                    help=(
-                        "Verdadeiro negativo: "
-                        "baixo risco e internação não prolongada."
-                    ),
                 )
 
 
@@ -2555,10 +2734,6 @@ with aba_desempenho:
                 st.metric(
                     "FP",
                     fp,
-                    help=(
-                        "Falso positivo: "
-                        "alto risco, mas internação não prolongada."
-                    ),
                 )
 
 
@@ -2567,16 +2742,12 @@ with aba_desempenho:
                 st.metric(
                     "FN",
                     fn,
-                    help=(
-                        "Falso negativo: "
-                        "baixo risco, mas internação prolongada."
-                    ),
                 )
 
 
-            # ---------------------------------------------
+            # -------------------------------------------------
             # MÉTRICAS
-            # ---------------------------------------------
+            # -------------------------------------------------
 
             sensibilidade = dividir_seguro(
                 vp,
@@ -2660,9 +2831,6 @@ with aba_desempenho:
                     mostrar_percentual(
                         vpp
                     ),
-                    help=(
-                        "Valor preditivo positivo."
-                    ),
                 )
 
 
@@ -2673,26 +2841,12 @@ with aba_desempenho:
                     mostrar_percentual(
                         vpn
                     ),
-                    help=(
-                        "Valor preditivo negativo."
-                    ),
                 )
 
 
-            st.caption(
-                "As métricas são recalculadas exclusivamente "
-                "com os casos que já possuem desfecho real registrado."
-            )
-
-
-            # =================================================
+            # -------------------------------------------------
             # MATRIZ DE CONFUSÃO
-            # =================================================
-
-            st.markdown(
-                "### Matriz de confusão"
-            )
-
+            # -------------------------------------------------
 
             matriz = pd.DataFrame(
                 [
@@ -2716,95 +2870,27 @@ with aba_desempenho:
             )
 
 
+            st.markdown(
+                "### Matriz de confusão"
+            )
+
+
             st.dataframe(
                 matriz,
                 use_container_width=True,
             )
 
 
-            # =================================================
-            # TABELA DOS CASOS AUDITADOS
-            # =================================================
+        else:
 
-            st.markdown(
-                "### Casos auditados"
-            )
-
-
-            colunas_exibicao = [
-                coluna
-                for coluna in [
-                    "prontuario",
-                    "data_cirurgia",
-                    "data_alta",
-                    "probabilidade",
-                    "classificacao_prevista",
-                    "dias_reais_internacao",
-                    "desfecho_real",
-                    "tipo_resultado",
-                    "predicao",
-                ]
-                if coluna
-                in df_auditados.columns
-            ]
-
-
-            tabela_auditados = (
-                df_auditados[
-                    colunas_exibicao
-                ]
-                .copy()
-            )
-
-
-            nomes_tabela = {
-
-                "prontuario":
-                    "Prontuário",
-
-                "data_cirurgia":
-                    "Data da cirurgia",
-
-                "data_alta":
-                    "Data da alta",
-
-                "probabilidade":
-                    "Probabilidade",
-
-                "classificacao_prevista":
-                    "Classificação prevista",
-
-                "dias_reais_internacao":
-                    "Dias cirurgia → alta",
-
-                "desfecho_real":
-                    "Desfecho real",
-
-                "tipo_resultado":
-                    "Tipo",
-
-                "predicao":
-                    "Predição",
-            }
-
-
-            tabela_auditados = (
-                tabela_auditados
-                .rename(
-                    columns=nomes_tabela
-                )
-            )
-
-
-            st.dataframe(
-                tabela_auditados,
-                use_container_width=True,
-                hide_index=True,
+            st.warning(
+                "Ainda não há pacientes com "
+                "desfecho registrado."
             )
 
 
         # =================================================
-        # EXPORTAÇÃO CSV COMPLETA
+        # CSV COMPLETO
         # =================================================
 
         st.divider()
@@ -2817,15 +2903,10 @@ with aba_desempenho:
 
         st.warning(
             "O arquivo contém prontuário e demais dados "
-            "registrados. Antes do uso assistencial com "
-            "dados reais, o acesso à aplicação deverá "
-            "estar restrito aos usuários autorizados."
+            "registrados. O acesso deverá ser restrito "
+            "aos usuários autorizados."
         )
 
-
-        # -------------------------------------------------
-        # ORGANIZAÇÃO DAS COLUNAS
-        # -------------------------------------------------
 
         colunas_prioritarias = [
             "id",
@@ -2861,19 +2942,15 @@ with aba_desempenho:
 
         colunas_existentes = [
             coluna
-            for coluna
-            in colunas_prioritarias
-            if coluna
-            in df_completo.columns
+            for coluna in colunas_prioritarias
+            if coluna in df_completo.columns
         ]
 
 
         outras_colunas = [
             coluna
-            for coluna
-            in df_completo.columns
-            if coluna
-            not in colunas_existentes
+            for coluna in df_completo.columns
+            if coluna not in colunas_existentes
         ]
 
 
@@ -2886,16 +2963,11 @@ with aba_desempenho:
         )
 
 
-        # -------------------------------------------------
-        # CSV PARA EXCEL EM PORTUGUÊS
-        # -------------------------------------------------
-
         csv_completo = (
             df_exportacao
             .to_csv(
                 index=False,
                 sep=";",
-                encoding="utf-8-sig",
             )
             .encode(
                 "utf-8-sig"
@@ -2923,13 +2995,6 @@ with aba_desempenho:
         )
 
 
-        st.caption(
-            "O arquivo inclui prontuário, variáveis preditoras, "
-            "probabilidade, threshold, classificação prevista, "
-            "datas, desfecho real e resultado da auditoria."
-        )
-
-
 # =========================================================
 # INFORMAÇÕES METODOLÓGICAS
 # =========================================================
@@ -2953,12 +3018,6 @@ with st.expander(
     )
 
 
-    st.write(
-        "O intervalo cirurgia → alta determina "
-        "o desfecho real utilizado na auditoria."
-    )
-
-
     st.markdown(
         """
 **Auditoria**
@@ -2976,12 +3035,15 @@ with st.expander(
 
     st.markdown(
         """
-**Métricas prospectivas**
+**Explicabilidade**
 
-- **Sensibilidade:** VP / (VP + FN)
-- **Especificidade:** VN / (VN + FP)
-- **VPP:** VP / (VP + FP)
-- **VPN:** VN / (VN + FN)
-- **Acurácia:** (VP + VN) / total de casos auditados
+Os valores SHAP das categorias produzidas pelo pré-processamento
+são agregados novamente por variável clínica original.
+
+Valores positivos contribuem para maior risco estimado.
+
+Valores negativos contribuem para menor risco estimado.
+
+A explicação representa o comportamento do modelo e não causalidade.
         """
     )

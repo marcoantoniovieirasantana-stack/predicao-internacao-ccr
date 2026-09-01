@@ -36,9 +36,7 @@ def limpar_novo_cadastro():
         for chave in list(st.session_state.keys())
         if (
             chave.startswith("pred_")
-            or chave.startswith("auditoria_")
             or chave in [
-                "registro_auditoria",
                 "prontuario",
                 "data_internacao",
                 "data_cirurgia",
@@ -961,14 +959,11 @@ if not modo_admin:
 
         with col_novo:
 
-            if st.button(
+            st.button(
                 "➕ Iniciar novo paciente",
                 use_container_width=True,
-            ):
-
-                limpar_novo_cadastro()
-
-                st.rerun()
+                on_click=limpar_novo_cadastro,
+            )
 
 
         with st.container(

@@ -897,7 +897,6 @@ st.sidebar.write(
     "**Desfecho:** Internação > 7 dias"
 )
 
-# Linguagem clínica
 st.sidebar.write(
     f"**Ponto de corte:** {threshold:.0%}"
 )
@@ -963,7 +962,7 @@ if not modo_admin:
         with col_novo:
 
             if st.button(
-                "➕ Novo cadastro",
+                "➕ Iniciar novo paciente",
                 use_container_width=True,
             ):
 

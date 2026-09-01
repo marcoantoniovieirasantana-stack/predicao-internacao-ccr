@@ -140,7 +140,7 @@ sensibilidade_meta = bundle.get(
 if threshold is None:
 
     st.error(
-        "O bundle não possui threshold operacional definido."
+        "O bundle não possui ponto de corte definido."
     )
 
     st.stop()
@@ -803,7 +803,6 @@ admin_autenticado = (
     )
 )
 
-
 pagina_admin = None
 
 
@@ -837,7 +836,6 @@ if not admin_autenticado:
             st.sidebar.error(
                 "Senha administrativa não configurada."
             )
-
 
         if (
             senha_correta
@@ -899,8 +897,9 @@ st.sidebar.write(
     "**Desfecho:** Internação > 7 dias"
 )
 
+# Linguagem clínica
 st.sidebar.write(
-    f"**Threshold:** {threshold:.0%}"
+    f"**Ponto de corte:** {threshold:.0%}"
 )
 
 if sensibilidade_meta is not None:
@@ -1501,7 +1500,7 @@ if not modo_admin:
                 st.error(
                     "🔴 ALTO RISCO — "
                     f"probabilidade {prob:.1%} ≥ "
-                    f"threshold {threshold:.0%}."
+                    f"ponto de corte {threshold:.0%}."
                 )
 
             else:
@@ -1509,7 +1508,7 @@ if not modo_admin:
                 st.success(
                     "🟢 BAIXO RISCO — "
                     f"probabilidade {prob:.1%} < "
-                    f"threshold {threshold:.0%}."
+                    f"ponto de corte {threshold:.0%}."
                 )
 
 
@@ -1587,7 +1586,7 @@ if not modo_admin:
             with col3:
 
                 st.metric(
-                    "Threshold operacional",
+                    "Ponto de corte",
                     f"{threshold:.0%}",
                 )
 
@@ -1785,28 +1784,35 @@ if not modo_admin:
             st.divider()
 
 
+            # =================================================
+            # UTILIDADE CLÍNICA / DCA
+            # =================================================
+
             st.markdown(
                 "## 📈 Utilidade clínica da decisão"
             )
 
 
             st.info(
-                "Na amostra de desenvolvimento, o modelo "
-                "apresentou benefício líquido em uma faixa "
-                "contínua de thresholds entre **21% e 80%**."
+                "Na amostra de desenvolvimento, o modelo apresentou "
+                "benefício clínico em uma faixa de pontos de corte "
+                "entre **21% e 80%**."
             )
 
 
             st.write(
-                f"O threshold operacional de **{threshold:.0%}** "
-                "está dentro dessa faixa."
+                f"O modelo utiliza **{threshold:.0%} como ponto de corte** "
+                "para classificar o paciente como alto risco de internação "
+                "prolongada. Esse valor está dentro da faixa em que o modelo "
+                "apresentou benefício clínico."
             )
 
 
             st.caption(
-                "Essa faixa representa utilidade clínica "
-                "potencial dos limiares de decisão e não "
-                "maior precisão das probabilidades."
+                "Essa faixa representa utilidade clínica potencial "
+                "dos diferentes pontos de corte e não significa que "
+                "o modelo tenha maior precisão em todas as probabilidades "
+                "entre 21% e 80%."
             )
 
 

@@ -731,55 +731,14 @@ def criar_campo(
         "type"
     ) == "numeric":
 
-        min_v = meta.get(
-            "min"
-        )
-
-        max_v = meta.get(
-            "max"
-        )
-
-        help_txt = None
-
-        if (
-            min_v is not None
-            and
-            max_v is not None
-        ):
-
-            help_txt = (
-                "Faixa observada no banco de desenvolvimento: "
-                f"{int(round(min_v))} a "
-                f"{int(round(max_v))}."
-            )
-
         valores[
             feature
         ] = st.number_input(
             label,
-            min_value=(
-                int(
-                    round(
-                        min_v
-                    )
-                )
-                if min_v is not None
-                else None
-            ),
-            max_value=(
-                int(
-                    round(
-                        max_v
-                    )
-                )
-                if max_v is not None
-                else None
-            ),
             value=None,
             step=1,
             format="%d",
             placeholder="Informe o valor",
-            help=help_txt,
             key=(
                 f"pred_"
                 f"{feature}_"

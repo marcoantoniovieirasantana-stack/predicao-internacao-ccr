@@ -1383,7 +1383,7 @@ if admin_autenticado:
 
 
     opcoes_area = [
-        "—",
+        "📝 Cadastro",
         "📋 Auditoria",
     ]
 
@@ -1466,7 +1466,7 @@ modo_admin = (
     pagina_admin
     not in [
         None,
-        "—",
+        "📝 Cadastro",
     ]
 )
 

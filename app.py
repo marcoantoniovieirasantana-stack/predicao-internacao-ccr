@@ -121,6 +121,48 @@ st.markdown(
     """
     <style>
 
+    @import url(
+        'https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap'
+    );
+
+    html,
+    body,
+    .stApp,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stSidebar"] {
+        font-family: "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
+        line-height: 1.55;
+    }
+
+    .stApp p,
+    .stApp label,
+    .stApp li,
+    .stApp input,
+    .stApp textarea,
+    .stApp button,
+    .stApp [role="radiogroup"] {
+        font-family: "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
+        letter-spacing: 0.01em;
+    }
+
+    .stApp h1,
+    .stApp h2,
+    .stApp h3,
+    .stApp h4,
+    .stApp h5,
+    .stApp h6 {
+        font-family: "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: 0;
+    }
+
+    .stApp input,
+    .stApp textarea,
+    .stApp button {
+        font-size: 1rem;
+    }
+
     .block-container {
         padding-top: 1.5rem;
         padding-bottom: 3rem;

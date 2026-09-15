@@ -192,16 +192,21 @@ if threshold is None:
 # SUPABASE
 # =========================================================
 
-@st.cache_resource
 def conectar_supabase():
 
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
 
-    return create_client(
-        url,
-        key,
-    )
+    if "supabase_client" not in st.session_state:
+
+        st.session_state["supabase_client"] = (
+            create_client(
+                url,
+                key,
+            )
+        )
+
+    return st.session_state["supabase_client"]
 
 
 try:
@@ -219,6 +224,299 @@ except Exception as exc:
     )
 
     st.stop()
+
+
+# =========================================================
+# AUTENTICAÇÃO E PERFIL DE ACESSO
+# =========================================================
+
+def encerrar_sessao():
+
+    try:
+
+        supabase.auth.sign_out()
+
+    except Exception:
+
+        pass
+
+
+    chaves_preservadas = {
+        "form_version",
+    }
+
+    for chave in list(
+        st.session_state.keys()
+    ):
+
+        if chave not in chaves_preservadas:
+
+            st.session_state.pop(
+                chave,
+                None,
+            )
+
+
+    st.rerun()
+
+
+def carregar_perfil_usuario(usuario):
+
+    resposta_perfil = (
+        supabase
+        .table(
+            "perfis_usuarios"
+        )
+        .select(
+            "user_id,email,nome,perfil,ativo"
+        )
+        .eq(
+            "user_id",
+            str(usuario.id),
+        )
+        .limit(
+            1
+        )
+        .execute()
+    )
+
+
+    registros_perfil = (
+        resposta_perfil.data
+        if resposta_perfil.data
+        else []
+    )
+
+
+    if not registros_perfil:
+
+        return None
+
+
+    return registros_perfil[0]
+
+
+usuario_atual = st.session_state.get(
+    "usuario_atual"
+)
+
+perfil_usuario = st.session_state.get(
+    "perfil_usuario"
+)
+
+
+if not usuario_atual or not perfil_usuario:
+
+    st.title(
+        "🏥 Predição de Internação Prolongada — CCR"
+    )
+
+    st.subheader(
+        "Acesso à aplicação"
+    )
+
+    st.caption(
+        "Utilize o e-mail previamente autorizado "
+        "pelo administrador."
+    )
+
+
+    with st.form(
+        "formulario_login",
+        clear_on_submit=False,
+    ):
+
+        email_login = st.text_input(
+            "E-mail",
+            placeholder="nome@exemplo.com",
+        )
+
+        senha_login = st.text_input(
+            "Senha",
+            type="password",
+        )
+
+        entrar = st.form_submit_button(
+            "Entrar",
+            type="primary",
+            use_container_width=True,
+        )
+
+
+    if entrar:
+
+        if (
+            not email_login.strip()
+            or
+            not senha_login
+        ):
+
+            st.warning(
+                "Informe o e-mail e a senha."
+            )
+
+
+        else:
+
+            try:
+
+                resposta_login = (
+                    supabase
+                    .auth
+                    .sign_in_with_password(
+                        {
+                            "email": email_login.strip().lower(),
+                            "password": senha_login,
+                        }
+                    )
+                )
+
+
+                usuario_login = resposta_login.user
+
+
+                if usuario_login is None:
+
+                    raise ValueError(
+                        "Usuário não localizado."
+                    )
+
+
+                perfil_login = carregar_perfil_usuario(
+                    usuario_login
+                )
+
+
+                if perfil_login is None:
+
+                    supabase.auth.sign_out()
+
+                    st.error(
+                        "Este usuário não está autorizado "
+                        "a acessar a aplicação."
+                    )
+
+
+                elif not perfil_login.get(
+                    "ativo",
+                    False,
+                ):
+
+                    supabase.auth.sign_out()
+
+                    st.error(
+                        "Este usuário está bloqueado. "
+                        "Procure o administrador."
+                    )
+
+
+                elif perfil_login.get(
+                    "perfil"
+                ) not in {
+                    "digitador",
+                    "auditor",
+                    "administrador",
+                }:
+
+                    supabase.auth.sign_out()
+
+                    st.error(
+                        "O perfil deste usuário é inválido."
+                    )
+
+
+                else:
+
+                    st.session_state[
+                        "usuario_atual"
+                    ] = {
+                        "id": str(usuario_login.id),
+                        "email": usuario_login.email,
+                    }
+
+                    st.session_state[
+                        "perfil_usuario"
+                    ] = perfil_login
+
+                    st.rerun()
+
+
+            except Exception:
+
+                st.error(
+                    "E-mail ou senha inválidos."
+                )
+
+
+    st.stop()
+
+
+usuario_id = str(
+    usuario_atual.get(
+        "id",
+        "",
+    )
+)
+
+usuario_email = str(
+    usuario_atual.get(
+        "email",
+        "",
+    )
+)
+
+nome_usuario = (
+    perfil_usuario.get(
+        "nome"
+    )
+    or
+    usuario_email
+)
+
+tipo_perfil = perfil_usuario.get(
+    "perfil",
+    "digitador",
+)
+
+
+def registrar_log_operacao(
+    operacao,
+    id_registro=None,
+    detalhes=None,
+):
+
+    try:
+
+        registro_log = {
+            "usuario_id": usuario_id,
+            "usuario_email": usuario_email,
+            "operacao": operacao,
+            "id_registro": (
+                str(id_registro)
+                if id_registro is not None
+                else None
+            ),
+            "detalhes": detalhes or {},
+        }
+
+        (
+            supabase
+            .table(
+                "log_operacoes"
+            )
+            .insert(
+                registro_log
+            )
+            .execute()
+        )
+
+
+    except Exception:
+
+        st.warning(
+            "A operação foi concluída, mas não foi possível "
+            "registrá-la no histórico de acessos."
+        )
 
 
 # =========================================================
@@ -1030,99 +1328,81 @@ st.caption(
 
 
 # =========================================================
-# ÁREA ADMINISTRATIVA
+# USUÁRIO E ÁREAS RESTRITAS
 # =========================================================
 
 st.sidebar.markdown(
-    "## 🔐 Área administrativa"
+    "## 👤 Usuário"
+)
+
+st.sidebar.write(
+    f"**{nome_usuario}**"
+)
+
+st.sidebar.caption(
+    usuario_email
+)
+
+rotulos_perfil = {
+    "digitador": "Digitador",
+    "auditor": "Auditor",
+    "administrador": "Administrador",
+}
+
+st.sidebar.write(
+    "**Perfil:** "
+    f"{rotulos_perfil.get(tipo_perfil, tipo_perfil)}"
 )
 
 
-admin_autenticado = (
-    st.session_state.get(
-        "admin_autenticado",
-        False,
-    )
-)
+if st.sidebar.button(
+    "🚪 Sair da aplicação",
+    use_container_width=True,
+):
+
+    encerrar_sessao()
+
+
+st.sidebar.divider()
+
+
+admin_autenticado = tipo_perfil in {
+    "auditor",
+    "administrador",
+}
 
 
 pagina_admin = None
 
 
-if not admin_autenticado:
+if admin_autenticado:
 
-    senha_digitada = (
-        st.sidebar
-        .text_input(
-            "Senha administrativa",
-            type="password",
-            key="senha_admin_input",
+    st.sidebar.markdown(
+        "## 🔐 Área restrita"
+    )
+
+
+    opcoes_area = [
+        "—",
+        "📋 Auditoria",
+    ]
+
+
+    if tipo_perfil == "administrador":
+
+        opcoes_area.extend(
+            [
+                "📊 Desempenho do modelo",
+                "📥 Gerar planilha CSV",
+            ]
         )
-    )
-
-
-    if st.sidebar.button(
-        "Acessar área administrativa",
-        use_container_width=True,
-    ):
-
-        try:
-
-            senha_correta = (
-                st.secrets[
-                    "admin"
-                ][
-                    "password"
-                ]
-            )
-
-        except Exception:
-
-            senha_correta = None
-
-            st.sidebar.error(
-                "Senha administrativa não configurada."
-            )
-
-
-        if (
-            senha_correta
-            and
-            senha_digitada
-            == senha_correta
-        ):
-
-            st.session_state[
-                "admin_autenticado"
-            ] = True
-
-            st.rerun()
-
-
-        else:
-
-            st.sidebar.error(
-                "Senha incorreta."
-            )
-
-
-else:
-
-    st.sidebar.success(
-        "Acesso administrativo liberado."
-    )
 
 
     pagina_admin = (
         st.sidebar
         .radio(
-            "Área administrativa",
-            [
-                "—",
-                "📋 Auditoria",
-                "📊 Desempenho do modelo",
-                "📥 Gerar planilha CSV",
-            ],
+            "Área restrita",
+            opcoes_area,
             label_visibility="collapsed",
             key="pagina_admin",
         )
@@ -1130,11 +1410,18 @@ else:
 
 
     if st.sidebar.button(
-        "🚪 Sair da área administrativa",
+        "↩️ Voltar à predição",
         use_container_width=True,
     ):
 
         sair_area_admin()
+
+
+else:
+
+    st.sidebar.info(
+        "Perfil autorizado para registrar novas predições."
+    )
 
 
 st.sidebar.divider()
@@ -1778,6 +2065,12 @@ if not modo_admin:
                     str(
                         family
                     ),
+
+                "usuario_criacao_id":
+                    usuario_id,
+
+                "usuario_criacao_email":
+                    usuario_email,
             }
 
 
@@ -1830,6 +2123,11 @@ if not modo_admin:
                         registro
                     )
                     .execute()
+                )
+
+                registrar_log_operacao(
+                    "criacao_predicao",
+                    id_predicao,
                 )
 
 
@@ -2392,6 +2690,10 @@ elif (
     if st.button(
         "🔎 Localizar registros sem prontuário",
         use_container_width=True,
+        disabled=(
+            tipo_perfil
+            != "administrador"
+        ),
     ):
 
         st.session_state.pop(
@@ -2783,6 +3085,12 @@ elif (
                             datetime.now(
                                 timezone.utc
                             ).isoformat(),
+
+                        "usuario_auditoria_id":
+                            usuario_id,
+
+                        "usuario_auditoria_email":
+                            usuario_email,
                     }
 
 
@@ -2803,6 +3111,13 @@ elif (
                                 ],
                             )
                             .execute()
+                        )
+
+                        registrar_log_operacao(
+                            "registro_alta_auditoria",
+                            registro_auditoria[
+                                "id_predicao"
+                            ],
                         )
 
 
@@ -2843,6 +3158,12 @@ elif (
         with st.expander(
             "🗑️ Excluir registro"
         ):
+
+            if tipo_perfil != "administrador":
+
+                st.info(
+                    "Somente o administrador pode excluir registros."
+                )
 
             st.warning(
                 "A exclusão é definitiva. Confira se este "
@@ -2968,7 +3289,12 @@ elif (
                 "Excluir registro definitivamente",
                 type="primary",
                 use_container_width=True,
-                disabled=not dados_conferem,
+                disabled=(
+                    not dados_conferem
+                    or
+                    tipo_perfil
+                    != "administrador"
+                ),
                 key=(
                     "botao_excluir_"
                     f"{id_predicao_registro}"
@@ -3007,6 +3333,15 @@ elif (
 
 
                     if resposta_exclusao.data:
+
+                        registrar_log_operacao(
+                            "exclusao_registro",
+                            id_predicao_registro,
+                            {
+                                "campo_identificador":
+                                    nome_campo_id,
+                            },
+                        )
 
                         st.session_state.pop(
                             "registro_auditoria",
@@ -3050,6 +3385,8 @@ elif (
 
 elif (
     admin_autenticado
+    and
+    tipo_perfil == "administrador"
     and
     pagina_admin
     == "📊 Desempenho do modelo"
@@ -3449,6 +3786,8 @@ elif (
 
 elif (
     admin_autenticado
+    and
+    tipo_perfil == "administrador"
     and
     pagina_admin
     == "📥 Gerar planilha CSV"

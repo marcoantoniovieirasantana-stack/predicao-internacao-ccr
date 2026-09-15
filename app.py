@@ -2315,6 +2315,16 @@ elif (
             None,
         )
 
+        st.session_state.pop(
+            "registros_auditoria",
+            None,
+        )
+
+        st.session_state.pop(
+            "auditoria_registro_selecionado",
+            None,
+        )
+
 
         if not prontuario_busca.strip():
 
@@ -2357,12 +2367,8 @@ elif (
                 if registros:
 
                     st.session_state[
-                        "registro_auditoria"
-                    ] = (
-                        registros[
-                            0
-                        ]
-                    )
+                        "registros_auditoria"
+                    ] = registros
 
 
                 else:
@@ -2383,11 +2389,69 @@ elif (
                 )
 
 
-    registro_auditoria = (
+    registros_auditoria = (
         st.session_state.get(
-            "registro_auditoria"
+            "registros_auditoria",
+            [],
         )
     )
+
+
+    if registros_auditoria:
+
+        st.success(
+            f"{len(registros_auditoria)} registro(s) "
+            "encontrado(s) para este prontuário."
+        )
+
+
+        def rotulo_registro_auditoria(indice):
+
+            registro = registros_auditoria[indice]
+
+            data_predicao = pd.to_datetime(
+                registro.get("data_predicao"),
+                errors="coerce",
+            )
+
+            data_texto = (
+                data_predicao.strftime("%d/%m/%Y %H:%M")
+                if not pd.isna(data_predicao)
+                else "data não informada"
+            )
+
+            situacao = (
+                "auditado"
+                if registro.get("desfecho_real")
+                else "aguardando alta"
+            )
+
+            return (
+                f"{data_texto} | {situacao} | "
+                f"ID: {registro.get('id_predicao', '')}"
+            )
+
+
+        indice_selecionado = st.selectbox(
+            "Selecione o lançamento",
+            options=list(range(len(registros_auditoria))),
+            format_func=rotulo_registro_auditoria,
+            key="auditoria_registro_selecionado",
+        )
+
+
+        registro_auditoria = (
+            registros_auditoria[indice_selecionado]
+        )
+
+        st.session_state[
+            "registro_auditoria"
+        ] = registro_auditoria
+
+
+    else:
+
+        registro_auditoria = None
 
 
     if registro_auditoria:
@@ -2616,6 +2680,11 @@ elif (
                             None,
                         )
 
+                        st.session_state.pop(
+                            "registros_auditoria",
+                            None,
+                        )
+
 
                     except Exception as exc:
 
@@ -2626,6 +2695,154 @@ elif (
                         st.exception(
                             exc
                         )
+
+
+        # -------------------------------------------------
+        # EXCLUIR REGISTRO
+        # -------------------------------------------------
+
+        st.divider()
+
+
+        with st.expander(
+            "🗑️ Excluir registro"
+        ):
+
+            st.warning(
+                "A exclusão é definitiva. Confira se este "
+                "é realmente o lançamento que deseja excluir."
+            )
+
+
+            prontuario_registro = str(
+                registro_auditoria.get(
+                    "prontuario",
+                    "",
+                )
+            )
+
+            id_predicao_registro = str(
+                registro_auditoria.get(
+                    "id_predicao",
+                    "",
+                )
+            )
+
+
+            st.write(
+                f"**Prontuário do registro:** "
+                f"{prontuario_registro}"
+            )
+
+            st.code(
+                id_predicao_registro,
+                language=None,
+            )
+
+
+            prontuario_confirmacao = st.text_input(
+                "Confirme o prontuário",
+                key=(
+                    "excluir_prontuario_"
+                    f"{id_predicao_registro}"
+                ),
+            )
+
+            id_confirmacao = st.text_input(
+                "Confirme o ID da predição",
+                key=(
+                    "excluir_id_"
+                    f"{id_predicao_registro}"
+                ),
+            )
+
+            confirmar_exclusao = st.checkbox(
+                "Confirmo que selecionei o registro correto.",
+                key=(
+                    "confirmar_exclusao_"
+                    f"{id_predicao_registro}"
+                ),
+            )
+
+
+            dados_conferem = (
+                prontuario_confirmacao.strip()
+                == prontuario_registro
+                and
+                id_confirmacao.strip()
+                == id_predicao_registro
+                and
+                confirmar_exclusao
+            )
+
+
+            if st.button(
+                "Excluir registro definitivamente",
+                type="primary",
+                use_container_width=True,
+                disabled=not dados_conferem,
+                key=(
+                    "botao_excluir_"
+                    f"{id_predicao_registro}"
+                ),
+            ):
+
+                try:
+
+                    resposta_exclusao = (
+                        supabase
+                        .table(
+                            "auditoria_predicoes"
+                        )
+                        .delete()
+                        .eq(
+                            "prontuario",
+                            prontuario_registro,
+                        )
+                        .eq(
+                            "id_predicao",
+                            id_predicao_registro,
+                        )
+                        .execute()
+                    )
+
+
+                    if resposta_exclusao.data:
+
+                        st.session_state.pop(
+                            "registro_auditoria",
+                            None,
+                        )
+
+                        st.session_state.pop(
+                            "registros_auditoria",
+                            None,
+                        )
+
+                        st.success(
+                            "Registro excluído com sucesso."
+                        )
+
+                        st.rerun()
+
+
+                    else:
+
+                        st.error(
+                            "Nenhum registro foi excluído. "
+                            "Atualize a busca e confira o prontuário e o ID."
+                        )
+
+
+                except Exception as exc:
+
+                    st.error(
+                        "Não foi possível excluir o registro."
+                    )
+
+                    st.exception(
+                        exc
+                    )
 
 
 # =========================================================

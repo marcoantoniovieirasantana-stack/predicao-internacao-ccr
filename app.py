@@ -2389,6 +2389,69 @@ elif (
                 )
 
 
+    if st.button(
+        "🔎 Localizar registros sem prontuário",
+        use_container_width=True,
+    ):
+
+        st.session_state.pop(
+            "registro_auditoria",
+            None,
+        )
+
+        st.session_state.pop(
+            "registros_auditoria",
+            None,
+        )
+
+        st.session_state.pop(
+            "auditoria_registro_selecionado",
+            None,
+        )
+
+
+        try:
+
+            todos_registros = carregar_todos_registros()
+
+            registros_sem_prontuario = [
+                registro
+                for registro in todos_registros
+                if (
+                    registro.get("prontuario") is None
+                    or
+                    not str(
+                        registro.get("prontuario")
+                    ).strip()
+                )
+            ]
+
+
+            if registros_sem_prontuario:
+
+                st.session_state[
+                    "registros_auditoria"
+                ] = registros_sem_prontuario
+
+
+            else:
+
+                st.info(
+                    "Nenhum registro sem prontuário foi encontrado."
+                )
+
+
+        except Exception as exc:
+
+            st.error(
+                "Erro ao localizar registros sem prontuário."
+            )
+
+            st.exception(
+                exc
+            )
+
+
     registros_auditoria = (
         st.session_state.get(
             "registros_auditoria",
@@ -2401,7 +2464,7 @@ elif (
 
         st.success(
             f"{len(registros_auditoria)} registro(s) "
-            "encontrado(s) para este prontuário."
+            "encontrado(s)."
         )
 
 
@@ -2469,7 +2532,7 @@ elif (
 
         st.write(
             f"**Prontuário:** "
-            f"{registro_auditoria.get('prontuario', '')}"
+            f"{registro_auditoria.get('prontuario') or 'Não informado'}"
         )
 
 
@@ -2714,24 +2777,46 @@ elif (
             )
 
 
-            prontuario_registro = str(
+            valor_prontuario_registro = (
                 registro_auditoria.get(
-                    "prontuario",
-                    "",
+                    "prontuario"
                 )
             )
 
-            id_predicao_registro = str(
+            prontuario_ausente = (
+                valor_prontuario_registro is None
+                or
+                not str(
+                    valor_prontuario_registro
+                ).strip()
+            )
+
+            prontuario_registro = (
+                ""
+                if prontuario_ausente
+                else str(
+                    valor_prontuario_registro
+                ).strip()
+            )
+
+            valor_id_predicao = (
                 registro_auditoria.get(
-                    "id_predicao",
-                    "",
+                    "id_predicao"
                 )
+            )
+
+            id_predicao_registro = (
+                ""
+                if valor_id_predicao is None
+                else str(
+                    valor_id_predicao
+                ).strip()
             )
 
 
             st.write(
                 f"**Prontuário do registro:** "
-                f"{prontuario_registro}"
+                f"{prontuario_registro or 'Não informado'}"
             )
 
             st.code(
@@ -2740,13 +2825,25 @@ elif (
             )
 
 
-            prontuario_confirmacao = st.text_input(
-                "Confirme o prontuário",
-                key=(
-                    "excluir_prontuario_"
-                    f"{id_predicao_registro}"
-                ),
-            )
+            if prontuario_ausente:
+
+                st.info(
+                    "Como este registro não possui prontuário, "
+                    "a confirmação será feita pelo ID único da predição."
+                )
+
+                prontuario_confirmacao = ""
+
+
+            else:
+
+                prontuario_confirmacao = st.text_input(
+                    "Confirme o prontuário",
+                    key=(
+                        "excluir_prontuario_"
+                        f"{id_predicao_registro}"
+                    ),
+                )
 
             id_confirmacao = st.text_input(
                 "Confirme o ID da predição",
@@ -2766,13 +2863,19 @@ elif (
 
 
             dados_conferem = (
-                prontuario_confirmacao.strip()
-                == prontuario_registro
+                bool(id_predicao_registro)
                 and
                 id_confirmacao.strip()
                 == id_predicao_registro
                 and
                 confirmar_exclusao
+                and
+                (
+                    prontuario_ausente
+                    or
+                    prontuario_confirmacao.strip()
+                    == prontuario_registro
+                )
             )
 
 
@@ -2789,21 +2892,32 @@ elif (
 
                 try:
 
-                    resposta_exclusao = (
+                    consulta_exclusao = (
                         supabase
                         .table(
                             "auditoria_predicoes"
                         )
                         .delete()
                         .eq(
-                            "prontuario",
-                            prontuario_registro,
-                        )
-                        .eq(
                             "id_predicao",
                             id_predicao_registro,
                         )
-                        .execute()
+                    )
+
+
+                    if not prontuario_ausente:
+
+                        consulta_exclusao = (
+                            consulta_exclusao
+                            .eq(
+                                "prontuario",
+                                prontuario_registro,
+                            )
+                        )
+
+
+                    resposta_exclusao = (
+                        consulta_exclusao.execute()
                     )
 
 

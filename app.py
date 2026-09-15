@@ -2415,7 +2415,7 @@ elif (
             todos_registros = carregar_todos_registros()
 
             registros_sem_prontuario = [
-                registro
+                dict(registro)
                 for registro in todos_registros
                 if (
                     registro.get("prontuario") is None
@@ -2425,6 +2425,58 @@ elif (
                     ).strip()
                 )
             ]
+
+
+            # Registros criados durante testes iniciais podem não
+            # possuir todos os campos exigidos pela tela atual.
+            # Os valores abaixo existem somente na memória da sessão
+            # para permitir visualizar e excluir o registro; eles não
+            # atualizam nem completam os dados armazenados no Supabase.
+            for registro in registros_sem_prontuario:
+
+                data_referencia = (
+                    registro.get("data_predicao")
+                    or
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                )
+
+                registro["data_cirurgia"] = (
+                    registro.get("data_cirurgia")
+                    or
+                    data_referencia
+                )
+
+                registro["probabilidade"] = (
+                    registro.get("probabilidade")
+                    if registro.get("probabilidade") is not None
+                    else 0.0
+                )
+
+                registro["classificacao_prevista"] = (
+                    registro.get("classificacao_prevista")
+                    or
+                    "Não informado"
+                )
+
+                registro["desfecho_real"] = (
+                    registro.get("desfecho_real")
+                    or
+                    "Não informado — registro de teste"
+                )
+
+                registro["tipo_resultado"] = (
+                    registro.get("tipo_resultado")
+                    or
+                    "Não informado"
+                )
+
+                registro["predicao"] = (
+                    registro.get("predicao")
+                    or
+                    "Não informado"
+                )
 
 
             if registros_sem_prontuario:
@@ -2491,7 +2543,8 @@ elif (
 
             return (
                 f"{data_texto} | {situacao} | "
-                f"ID: {registro.get('id_predicao', '')}"
+                f"ID: "
+                f"{registro.get('id_predicao') or registro.get('id', '')}"
             )
 
 
@@ -2577,9 +2630,29 @@ elif (
             )
         ):
 
-            st.info(
-                "Este caso já foi auditado."
-            )
+            if (
+                registro_auditoria.get(
+                    "prontuario"
+                ) is None
+                or
+                not str(
+                    registro_auditoria.get(
+                        "prontuario"
+                    )
+                ).strip()
+            ):
+
+                st.info(
+                    "Registro antigo sem prontuário selecionado "
+                    "para conferência ou exclusão."
+                )
+
+
+            else:
+
+                st.info(
+                    "Este caso já foi auditado."
+                )
 
 
             col1, col2, col3 = (
@@ -2799,9 +2872,17 @@ elif (
                 ).strip()
             )
 
+            nome_campo_id = (
+                "id_predicao"
+                if registro_auditoria.get(
+                    "id_predicao"
+                )
+                else "id"
+            )
+
             valor_id_predicao = (
                 registro_auditoria.get(
-                    "id_predicao"
+                    nome_campo_id
                 )
             )
 
@@ -2822,6 +2903,10 @@ elif (
             st.code(
                 id_predicao_registro,
                 language=None,
+            )
+
+            st.caption(
+                f"Identificador utilizado: {nome_campo_id}"
             )
 
 
@@ -2846,7 +2931,7 @@ elif (
                 )
 
             id_confirmacao = st.text_input(
-                "Confirme o ID da predição",
+                "Confirme o ID exibido",
                 key=(
                     "excluir_id_"
                     f"{id_predicao_registro}"
@@ -2899,7 +2984,7 @@ elif (
                         )
                         .delete()
                         .eq(
-                            "id_predicao",
+                            nome_campo_id,
                             id_predicao_registro,
                         )
                     )

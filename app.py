@@ -14,7 +14,7 @@ from supabase import create_client
 # =========================================================
 
 st.set_page_config(
-    page_title="CCR | Predição de internação prolongada",
+    page_title="Câncer Colorretal | Predição de internação prolongada",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -350,7 +350,7 @@ perfil_usuario = st.session_state.get(
 if not usuario_atual or not perfil_usuario:
 
     st.title(
-        "🏥 Predição de Internação Prolongada — CCR"
+        "🏥 Predição de Internação Prolongada — Câncer Colorretal"
     )
 
     st.subheader(
@@ -1314,7 +1314,7 @@ def carregar_todos_registros():
 # =========================================================
 
 st.title(
-    "🏥 Predição de Internação Prolongada — CCR"
+    "🏥 Predição de Internação Prolongada — Câncer Colorretal"
 )
 
 st.subheader(
@@ -1499,8 +1499,8 @@ if not modo_admin:
         col_titulo, col_novo = (
             st.columns(
                 [
-                    4,
-                    1,
+                    3,
+                    2,
                 ]
             )
         )

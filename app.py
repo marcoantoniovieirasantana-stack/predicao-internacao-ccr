@@ -192,6 +192,19 @@ st.markdown(
 )
 
 
+def exibir_aviso_prototipo():
+
+    st.warning(
+        "⚠️ **PROTÓTIPO EM DESENVOLVIMENTO**  \n"
+        "Esta aplicação destina-se exclusivamente à "
+        "avaliação e à pesquisa. Ainda não reúne todas "
+        "as camadas de segurança necessárias para uso "
+        "operacional ou assistencial. Nesta fase, utilize "
+        "somente dados fictícios e não empregue o resultado "
+        "como única base para decisões clínicas."
+    )
+
+
 # =========================================================
 # MODELO
 # =========================================================
@@ -359,6 +372,8 @@ if not usuario_atual or not perfil_usuario:
     st.title(
         "🏥 Predição de Internação Prolongada — Câncer Colorretal"
     )
+
+    exibir_aviso_prototipo()
 
     st.subheader(
         "Acesso à aplicação"
@@ -1339,10 +1354,11 @@ st.subheader(
     "Ferramenta de apoio à decisão no pós-operatório"
 )
 
+exibir_aviso_prototipo()
+
 st.caption(
-    "Protótipo em desenvolvimento. "
-    "O resultado deve ser interpretado considerando "
-    "o desempenho e as limitações do modelo."
+    "O resultado deve ser interpretado considerando o "
+    "desempenho, o contexto clínico e as limitações do modelo."
 )
 
 

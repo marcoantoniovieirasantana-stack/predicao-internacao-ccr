@@ -24,6 +24,12 @@ BUNDLE_PATH = Path(__file__).with_name(
     "27_deployment_bundle.joblib"
 )
 
+USUARIO_TESTE_ID = (
+    "57b401f8-5946-4128-9cda-af15a3632b11"
+)
+
+TAMANHO_MINIMO_SENHA = 8
+
 
 # =========================================================
 # CONTROLE DE VERSÃO DO FORMULÁRIO
@@ -285,6 +291,7 @@ def encerrar_sessao():
 
     chaves_preservadas = {
         "form_version",
+        "mensagem_login",
     }
 
     for chave in list(
@@ -361,6 +368,17 @@ if not usuario_atual or not perfil_usuario:
         "Utilize o e-mail previamente autorizado "
         "pelo administrador."
     )
+
+    mensagem_login = st.session_state.pop(
+        "mensagem_login",
+        None,
+    )
+
+    if mensagem_login:
+
+        st.success(
+            mensagem_login
+        )
 
 
     with st.form(
@@ -1356,6 +1374,90 @@ st.sidebar.write(
 )
 
 
+if usuario_id != USUARIO_TESTE_ID:
+
+    with st.sidebar.expander(
+        "🔑 Alterar senha"
+    ):
+
+        with st.form(
+            "formulario_alterar_senha",
+            clear_on_submit=True,
+        ):
+
+            nova_senha = st.text_input(
+                "Nova senha",
+                type="password",
+                help=(
+                    "Utilize pelo menos "
+                    f"{TAMANHO_MINIMO_SENHA} caracteres."
+                ),
+            )
+
+            confirmar_nova_senha = st.text_input(
+                "Confirmar nova senha",
+                type="password",
+            )
+
+            salvar_nova_senha = st.form_submit_button(
+                "Salvar nova senha",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if salvar_nova_senha:
+
+            if len(nova_senha) < TAMANHO_MINIMO_SENHA:
+
+                st.error(
+                    "A senha deve ter pelo menos "
+                    f"{TAMANHO_MINIMO_SENHA} caracteres."
+                )
+
+            elif nova_senha != confirmar_nova_senha:
+
+                st.error(
+                    "As senhas informadas não coincidem."
+                )
+
+            else:
+
+                try:
+
+                    supabase.auth.update_user(
+                        {
+                            "password": nova_senha,
+                        }
+                    )
+
+                    registrar_log_operacao(
+                        "alteracao_senha"
+                    )
+
+                    st.session_state[
+                        "mensagem_login"
+                    ] = (
+                        "Senha alterada com sucesso. "
+                        "Entre novamente com a nova senha."
+                    )
+
+                    encerrar_sessao()
+
+                except Exception:
+
+                    st.error(
+                        "Não foi possível alterar a senha. "
+                        "Tente novamente."
+                    )
+
+else:
+
+    st.sidebar.caption(
+        "A alteração de senha está bloqueada "
+        "para o usuário Teste."
+    )
+
+
 if st.sidebar.button(
     "🚪 Sair da aplicação",
     use_container_width=True,
@@ -1393,6 +1495,7 @@ if admin_autenticado:
 
         opcoes_area.extend(
             [
+                "👥 Gerenciar usuários",
                 "📊 Desempenho do modelo",
                 "📥 Gerar planilha CSV",
             ]
@@ -2572,6 +2675,234 @@ if not modo_admin:
                 "o modelo tenha maior precisão em todas as probabilidades "
                 "entre 21% e 80%."
             )
+
+
+# =========================================================
+# ADMIN — GERENCIAR USUÁRIOS
+# =========================================================
+
+elif (
+    admin_autenticado
+    and
+    tipo_perfil == "administrador"
+    and
+    pagina_admin
+    == "👥 Gerenciar usuários"
+):
+
+
+    st.markdown(
+        "## 👥 Gerenciar usuários"
+    )
+
+    st.caption(
+        "Somente o administrador pode consultar, "
+        "desativar ou reativar acessos."
+    )
+
+    st.info(
+        "A desativação bloqueia o acesso e preserva "
+        "o histórico de auditoria. Usuários não são "
+        "excluídos definitivamente nesta tela."
+    )
+
+    try:
+
+        resposta_usuarios = (
+            supabase
+            .table(
+                "perfis_usuarios"
+            )
+            .select(
+                "user_id,email,nome,perfil,ativo,criado_em"
+            )
+            .order(
+                "nome"
+            )
+            .execute()
+        )
+
+        usuarios_cadastrados = (
+            resposta_usuarios.data
+            if resposta_usuarios.data
+            else []
+        )
+
+    except Exception:
+
+        usuarios_cadastrados = []
+
+        st.error(
+            "Não foi possível consultar os usuários. "
+            "Confirme se a query de gestão de usuários "
+            "foi executada no Supabase."
+        )
+
+
+    if usuarios_cadastrados:
+
+        tabela_usuarios = pd.DataFrame(
+            usuarios_cadastrados
+        )
+
+        tabela_usuarios["perfil"] = (
+            tabela_usuarios["perfil"]
+            .map(rotulos_perfil)
+            .fillna(tabela_usuarios["perfil"])
+        )
+
+        tabela_usuarios["situação"] = np.where(
+            tabela_usuarios["ativo"],
+            "Ativo",
+            "Desativado",
+        )
+
+        st.dataframe(
+            tabela_usuarios[
+                [
+                    "nome",
+                    "email",
+                    "perfil",
+                    "situação",
+                ]
+            ].rename(
+                columns={
+                    "nome": "Nome",
+                    "email": "E-mail",
+                    "perfil": "Perfil",
+                    "situação": "Situação",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        usuarios_por_id = {
+            str(usuario["user_id"]): usuario
+            for usuario in usuarios_cadastrados
+        }
+
+        usuario_selecionado_id = st.selectbox(
+            "Usuário",
+            options=list(usuarios_por_id.keys()),
+            format_func=lambda identificador: (
+                f"{usuarios_por_id[identificador]['nome']} — "
+                f"{usuarios_por_id[identificador]['email']}"
+            ),
+        )
+
+        usuario_selecionado = usuarios_por_id[
+            usuario_selecionado_id
+        ]
+
+        if usuario_selecionado_id == usuario_id:
+
+            st.warning(
+                "O administrador conectado não pode "
+                "desativar o próprio acesso."
+            )
+
+        elif usuario_selecionado.get("ativo", False):
+
+            confirmar_desativacao = st.checkbox(
+                "Confirmo a desativação deste usuário.",
+                key="confirmar_desativacao_usuario",
+            )
+
+            if st.button(
+                "🚫 Desativar acesso",
+                type="primary",
+                disabled=not confirmar_desativacao,
+                use_container_width=True,
+            ):
+
+                try:
+
+                    (
+                        supabase
+                        .table("perfis_usuarios")
+                        .update(
+                            {
+                                "ativo": False,
+                                "atualizado_em": datetime.now(
+                                    timezone.utc
+                                ).isoformat(),
+                            }
+                        )
+                        .eq(
+                            "user_id",
+                            usuario_selecionado_id,
+                        )
+                        .execute()
+                    )
+
+                    registrar_log_operacao(
+                        "desativacao_usuario",
+                        id_registro=usuario_selecionado_id,
+                        detalhes={
+                            "email": usuario_selecionado["email"],
+                        },
+                    )
+
+                    st.success(
+                        "Usuário desativado com sucesso."
+                    )
+
+                    st.rerun()
+
+                except Exception:
+
+                    st.error(
+                        "Não foi possível desativar o usuário."
+                    )
+
+        else:
+
+            if st.button(
+                "✅ Reativar acesso",
+                type="primary",
+                use_container_width=True,
+            ):
+
+                try:
+
+                    (
+                        supabase
+                        .table("perfis_usuarios")
+                        .update(
+                            {
+                                "ativo": True,
+                                "atualizado_em": datetime.now(
+                                    timezone.utc
+                                ).isoformat(),
+                            }
+                        )
+                        .eq(
+                            "user_id",
+                            usuario_selecionado_id,
+                        )
+                        .execute()
+                    )
+
+                    registrar_log_operacao(
+                        "reativacao_usuario",
+                        id_registro=usuario_selecionado_id,
+                        detalhes={
+                            "email": usuario_selecionado["email"],
+                        },
+                    )
+
+                    st.success(
+                        "Usuário reativado com sucesso."
+                    )
+
+                    st.rerun()
+
+                except Exception:
+
+                    st.error(
+                        "Não foi possível reativar o usuário."
+                    )
 
 
 # =========================================================

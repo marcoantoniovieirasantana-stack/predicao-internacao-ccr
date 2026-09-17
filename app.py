@@ -199,8 +199,7 @@ def exibir_aviso_prototipo():
         "Esta aplicação destina-se exclusivamente à "
         "avaliação e à pesquisa. Ainda não reúne todas "
         "as camadas de segurança necessárias para uso "
-        "operacional ou assistencial. Nesta fase, utilize "
-        "somente dados fictícios e não empregue o resultado "
+        "operacional ou assistencial. Não empregue o resultado "
         "como única base para decisões clínicas."
     )
 

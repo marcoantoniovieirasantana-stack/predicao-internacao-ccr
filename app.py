@@ -175,139 +175,15 @@ st.markdown(
         max-width: 1350px;
     }
 
-    /* =====================================================
-       PALETA VISUAL — PROJETO CCR
-       Fundo suave, cards brancos e azul institucional
-       ===================================================== */
-
-    :root {
-        --ccr-bg: #F4F7FA;
-        --ccr-surface: #FFFFFF;
-        --ccr-primary: #1F4E79;
-        --ccr-secondary: #2F75B5;
-        --ccr-text: #172B3A;
-        --ccr-muted: #536777;
-        --ccr-border: #D8E2EA;
-        --ccr-success: #2E7D32;
-        --ccr-warning: #F9A825;
-        --ccr-danger: #C62828;
-    }
-
-    html,
-    body,
-    .stApp,
-    [data-testid="stAppViewContainer"] {
-        background-color: var(--ccr-bg);
-        color: var(--ccr-text);
-    }
-
-    [data-testid="stHeader"] {
-        background-color: rgba(244, 247, 250, 0.95);
-    }
-
-    [data-testid="stSidebar"] {
-        background-color: #EAF1F7;
-        border-right: 1px solid var(--ccr-border);
-    }
-
-    .stApp h1,
-    .stApp h2,
-    .stApp h3,
-    .stApp h4,
-    .stApp h5,
-    .stApp h6 {
-        color: var(--ccr-primary);
-    }
-
-    .stApp p,
-    .stApp label,
-    .stApp li {
-        color: var(--ccr-text);
-    }
-
-    .stApp [data-testid="stCaptionContainer"],
-    .stApp small {
-        color: var(--ccr-muted);
-    }
-
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: var(--ccr-surface);
-        border: 1px solid var(--ccr-border);
-        border-radius: 14px;
-    }
-
     div[data-testid="stMetric"] {
-        background-color: var(--ccr-surface);
-        border: 1px solid var(--ccr-border);
+        background-color: rgba(128,128,128,0.06);
+        border: 1px solid rgba(128,128,128,0.18);
         padding: 1rem;
         border-radius: 12px;
     }
 
-    div[data-testid="stMetric"] label {
-        color: var(--ccr-muted);
-    }
-
-    div[data-testid="stMetricValue"] {
-        color: var(--ccr-primary);
-        font-weight: 700;
-    }
-
-    /* Campos de entrada */
-    [data-baseweb="input"] > div,
-    [data-baseweb="select"] > div,
-    [data-baseweb="textarea"] {
-        background-color: var(--ccr-surface);
-        border-color: var(--ccr-border);
-    }
-
-    .stApp input,
-    .stApp textarea {
-        color: var(--ccr-text);
-        background-color: var(--ccr-surface);
-    }
-
-    /* Botões principais */
-    .stButton > button[kind="primary"],
-    .stFormSubmitButton > button[kind="primary"],
-    .stDownloadButton > button[kind="primary"] {
-        background-color: var(--ccr-primary);
-        border-color: var(--ccr-primary);
-        color: #FFFFFF;
-        font-weight: 700;
-    }
-
-    .stButton > button[kind="primary"]:hover,
-    .stFormSubmitButton > button[kind="primary"]:hover,
-    .stDownloadButton > button[kind="primary"]:hover {
-        background-color: #173C5E;
-        border-color: #173C5E;
-        color: #FFFFFF;
-    }
-
-    /* Botões secundários */
-    .stButton > button:not([kind="primary"]) {
-        border-color: var(--ccr-secondary);
-    }
-
-    /* Abas */
-    button[data-baseweb="tab"] {
-        color: var(--ccr-text);
-    }
-
-    button[data-baseweb="tab"][aria-selected="true"] {
-        color: var(--ccr-primary);
-        font-weight: 700;
-    }
-
-    /* Tabelas */
-    [data-testid="stDataFrame"] {
-        background-color: var(--ccr-surface);
-        border-radius: 12px;
-    }
-
-    /* Divisores */
-    hr {
-        border-color: var(--ccr-border);
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 14px;
     }
 
     </style>

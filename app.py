@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 
 from pathlib import Path
+from html import escape
 from uuid import uuid4
 from datetime import datetime, timezone
 from supabase import create_client
@@ -172,6 +173,11 @@ st.markdown(
     .stApp textarea,
     .stApp button {
         font-size: 1rem;
+    }
+
+    /* Remove a instrução de Enter dos campos de texto (inclusive e-mail e senha). */
+    div[data-testid="InputInstructions"] {
+        display: none !important;
     }
 
     .block-container {
@@ -403,6 +409,7 @@ if not usuario_atual or not perfil_usuario:
     with st.form(
         "formulario_login",
         clear_on_submit=False,
+        enter_to_submit=False,
     ):
 
         email_login = st.text_input(
@@ -1381,8 +1388,10 @@ st.sidebar.write(
     f"**{nome_usuario}**"
 )
 
-st.sidebar.caption(
-    usuario_email
+st.sidebar.markdown(
+    f'<span class="notranslate" translate="no" '
+    f'style="overflow-wrap:anywhere">{escape(usuario_email)}</span>',
+    unsafe_allow_html=True,
 )
 
 try:
@@ -1422,7 +1431,7 @@ if modo_ivc:
 if usuario_id != USUARIO_TESTE_ID:
 
     with st.sidebar.expander(
-        "🔑 Alterar senha"
+        "Alterar senha"
     ):
 
         with st.form(
@@ -1504,7 +1513,7 @@ else:
 
 
 if st.sidebar.button(
-    "🚪 Sair da aplicação",
+    "Sair da aplicação",
     use_container_width=True,
 ):
 

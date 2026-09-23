@@ -1,11 +1,18 @@
 """Acesso e registro das simulações dos avaliadores IVC."""
 
 VERSAO_APP = 'ivc2'
+EMAILS_SEM_IVC = frozenset({
+    'caugustomsousa@gmail.com',
+    'marcoantonio.vieirasantana@yahoo.com.br',
+})
 
 
 def inscrito(supabase, email):
+    email = email.strip().lower()
+    if email in EMAILS_SEM_IVC:
+        return False
     resposta = (supabase.table('ivc_avaliadores').select('ativo')
-                .eq('email', email.strip().lower()).limit(1).execute())
+                .eq('email', email).limit(1).execute())
     return bool(resposta.data and resposta.data[0]['ativo'])
 
 

@@ -30,7 +30,7 @@ def _normalizar(valor):
     return texto.casefold().replace(' ', '').replace('_', '')
 
 def valor_inicial(feature, meta, formatar_categoria):
-    """Prefill only if the deployed bundle gives an unambiguous option."""
+    """Resolve the expected model value from the case and deployed schema."""
     alvo = VALORES_CASO.get(feature)
     if alvo is None:
         return None
@@ -54,12 +54,40 @@ def valor_inicial(feature, meta, formatar_categoria):
     return encontrados[0] if len(encontrados) == 1 else None
 
 def exibir_caso():
-    st.info('Caso padronizado para a avaliação IVC. Os dados desta simulação não serão gravados na auditoria clínica.')
-    st.markdown(f'**{NOME_PROCEDIMENTO}** · Prontuário de teste {PRONTUARIO_CASO} · '
-                'Internação 03/01/2026 · Cirurgia 05/01/2026')
-    st.caption('Feminino; idade na internação 60; idade ao diagnóstico 59; ASA 2; reto inferior; '
-               'estágio III; neoadjuvância sim; laparoscópica; 345 min; um órgão envolvido; '
-               'UTI sim; urgência não. Intervalo entre internação e cirurgia: 2 dias.')
+    st.info('Preencha os campos abaixo com os dados deste caso. A simulação não será gravada na auditoria clínica.')
+    with st.expander('📋 Dados do caso para preenchimento', expanded=True):
+        st.markdown(
+            f'**Procedimento:** {NOME_PROCEDIMENTO}  \n'
+            f'**Prontuário de teste:** {PRONTUARIO_CASO}  \n'
+            '**Internação:** 03/01/2026 · **Cirurgia:** 05/01/2026  \n'
+            '**Sexo:** Feminino · **Idade na internação:** 60 anos · **Idade ao diagnóstico:** 59 anos  \n'
+            '**ASA:** 2 · **Localização:** Reto inferior · **Estágio:** III  \n'
+            '**Neoadjuvância:** Sim · **Abordagem:** Laparoscópica · **Tempo cirúrgico:** 345 minutos  \n'
+            '**Órgãos envolvidos:** 1 · **UTI:** Sim · **Urgência:** Não'
+        )
+
+def divergencias_caso(prontuario, data_internacao, data_cirurgia,
+                      valores, predictors, schema, formatar_categoria):
+    """Check every clinical input before calculating or saving the test."""
+    divergencias = []
+    if prontuario.strip() != PRONTUARIO_CASO:
+        divergencias.append('Prontuário de teste')
+    if data_internacao != DATA_INTERNACAO:
+        divergencias.append('Data da internação')
+    if data_cirurgia != DATA_CIRURGIA:
+        divergencias.append('Data da cirurgia')
+    for feature in predictors:
+        if feature == 'tempo_int_cir_dias':
+            esperado = (DATA_CIRURGIA - DATA_INTERNACAO).days
+        else:
+            esperado = valor_inicial(feature, schema.get(feature, {}), formatar_categoria)
+        if esperado is None:
+            divergencias.append('Configuração do caso: ' + feature)
+            continue
+        recebido = valores.get(feature)
+        if str(recebido) != str(esperado):
+            divergencias.append(schema.get(feature, {}).get('label', feature))
+    return divergencias
 ITENS = [
  'A finalidade, a população prevista e o momento da predição estão claros.',
  'Os dados solicitados são pertinentes e compreensíveis no pós-operatório imediato.',

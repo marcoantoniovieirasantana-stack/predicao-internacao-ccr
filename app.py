@@ -7,6 +7,11 @@ from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timezone
 from supabase import create_client
+from ivc_module import (
+    inscrito, registrar_teste, questionario, CODIGO_CASO,
+    PRONTUARIO_CASO, DATA_INTERNACAO, DATA_CIRURGIA,
+    exibir_caso, valor_inicial, VALORES_CASO,
+)
 
 
 # =========================================================
@@ -75,6 +80,7 @@ def iniciar_novo_paciente():
         "ultima_predicao",
         None,
     )
+    st.session_state.pop("ivc_teste_atual", None)
 
     # -----------------------------------------------------
     # Cria uma nova versão do formulário
@@ -763,11 +769,17 @@ def criar_campo(
         "type"
     ) == "numeric":
 
+        valor_padrao = (
+            valor_inicial(feature, meta, formatar_categoria)
+            if modo_ivc else None
+        )
+
         valores[
             feature
         ] = st.number_input(
             label,
-            value=None,
+            value=valor_padrao,
+            disabled=bool(modo_ivc and valor_padrao is not None),
             step=1,
             format="%d",
             placeholder="Informe o valor",
@@ -794,14 +806,23 @@ def criar_campo(
 
         if options:
 
+            valor_padrao = (
+                valor_inicial(feature, meta, formatar_categoria)
+                if modo_ivc else None
+            )
+
             valores[
                 feature
             ] = st.selectbox(
                 label,
                 options=options,
-                index=None,
+                index=options.index(valor_padrao) if valor_padrao is not None else None,
+                disabled=bool(modo_ivc and valor_padrao is not None),
                 placeholder="Selecione uma opção",
-                format_func=formatar_categoria,
+                format_func=(
+                    (lambda v: {"0": "0", "1": "I", "2": "II", "3": "III", "4": "IV"}.get(str(v), str(v)))
+                    if modo_ivc and feature == "f_estagio" else formatar_categoria
+                ),
                 key=(
                     f"pred_"
                     f"{feature}_"
@@ -1377,6 +1398,26 @@ st.sidebar.caption(
     usuario_email
 )
 
+try:
+    modo_ivc = inscrito(supabase, usuario_email)
+except Exception:
+    st.error("Não foi possível verificar o acesso à avaliação IVC.")
+    st.stop()
+
+if modo_ivc:
+    try:
+        testes_anteriores = (supabase.table("ivc_testes")
+            .select("id,probabilidade,classificacao")
+            .eq("avaliador_id", usuario_id)
+            .order("criado_em", desc=True).limit(1).execute().data)
+    except Exception:
+        st.error("Não foi possível consultar o caso de avaliação.")
+        st.stop()
+    if testes_anteriores:
+        st.session_state["ivc_teste_atual"] = testes_anteriores[0]["id"]
+else:
+    testes_anteriores = []
+
 rotulos_perfil = {
     "digitador": "Digitador",
     "auditor": "Auditor",
@@ -1387,6 +1428,8 @@ st.sidebar.write(
     "**Perfil:** "
     f"{rotulos_perfil.get(tipo_perfil, tipo_perfil)}"
 )
+if modo_ivc:
+    st.sidebar.info("Modo IVC: simulações separadas da auditoria clínica.")
 
 
 if usuario_id != USUARIO_TESTE_ID:
@@ -1484,7 +1527,7 @@ if st.sidebar.button(
 st.sidebar.divider()
 
 
-admin_autenticado = tipo_perfil in {
+admin_autenticado = (not modo_ivc) and tipo_perfil in {
     "auditor",
     "administrador",
 }
@@ -1629,6 +1672,20 @@ if not modo_admin:
             st.markdown(
                 "### Cadastro para predição"
             )
+            if modo_ivc:
+                exibir_caso()
+                campos_sem_preenchimento = [
+                    nomes_clinicos.get(f, f)
+                    for f in predictors
+                    if f in VALORES_CASO and valor_inicial(
+                        f, schema.get(f, {}), formatar_categoria
+                    ) is None
+                ]
+                if campos_sem_preenchimento:
+                    st.warning(
+                        "Confira e preencha manualmente os campos sem correspondência "
+                        "automática no modelo: " + ", ".join(campos_sem_preenchimento)
+                    )
 
 
         with col_novo:
@@ -1637,6 +1694,7 @@ if not modo_admin:
                 "➕ Iniciar novo paciente",
                 use_container_width=True,
                 on_click=iniciar_novo_paciente,
+                disabled=bool(modo_ivc and testes_anteriores),
             )
 
 
@@ -1671,8 +1729,9 @@ if not modo_admin:
             with col1:
 
                 prontuario = st.text_input(
-                    "Prontuário",
-                    value="",
+                    "Código do caso de avaliação" if modo_ivc else "Prontuário",
+                    value=PRONTUARIO_CASO if modo_ivc else "",
+                    disabled=modo_ivc,
                     placeholder="Digite o prontuário",
                     key=(
                         f"prontuario_"
@@ -1686,7 +1745,8 @@ if not modo_admin:
                 data_internacao = (
                     st.date_input(
                         "Data da internação",
-                        value=None,
+                        value=DATA_INTERNACAO if modo_ivc else None,
+                        disabled=modo_ivc,
                         format="DD/MM/YYYY",
                         key=(
                             f"data_internacao_"
@@ -1701,7 +1761,8 @@ if not modo_admin:
                 data_cirurgia = (
                     st.date_input(
                         "Data da cirurgia",
-                        value=None,
+                        value=DATA_CIRURGIA if modo_ivc else None,
+                        disabled=modo_ivc,
                         format="DD/MM/YYYY",
                         key=(
                             f"data_cirurgia_"
@@ -1953,6 +2014,7 @@ if not modo_admin:
         calcular = st.button(
             "🧠 Calcular risco de internação prolongada",
             type="primary",
+            disabled=bool(modo_ivc and testes_anteriores),
             use_container_width=True,
             key=(
                 f"calcular_"
@@ -2228,42 +2290,24 @@ if not modo_admin:
 
 
             # =============================================
-            # SALVAR NO SUPABASE
+            # SALVAR TESTES IVC FORA DA AUDITORIA CLÍNICA
             # =============================================
-
             try:
-
-                (
-                    supabase
-                    .table(
-                        "auditoria_predicoes"
-                    )
-                    .insert(
-                        registro
-                    )
-                    .execute()
-                )
-
-                registrar_log_operacao(
-                    "criacao_predicao",
-                    id_predicao,
-                )
-
-
+                if modo_ivc:
+                    if (prontuario.strip() != PRONTUARIO_CASO
+                            or data_internacao != DATA_INTERNACAO
+                            or data_cirurgia != DATA_CIRURGIA):
+                        st.error("Confira o prontuário e as datas do caso de avaliação.")
+                        st.stop()
+                    registrar_teste(supabase, usuario_id, usuario_email,
+                                    id_predicao, prob, classificacao_prevista)
+                    st.session_state["ivc_teste_atual"] = id_predicao
+                else:
+                    supabase.table("auditoria_predicoes").insert(registro).execute()
+                    registrar_log_operacao("criacao_predicao", id_predicao)
             except Exception as exc:
-
-                st.error(
-                    "A predição foi calculada, "
-                    "mas não foi possível registrá-la "
-                    "no banco de auditoria."
-                )
-
-                st.exception(
-                    exc
-                )
-
+                st.error("Não foi possível salvar a predição. Tente novamente.")
                 st.stop()
-
 
             # =============================================
             # GUARDAR PARA SHAP
@@ -2332,7 +2376,8 @@ if not modo_admin:
 
 
             st.success(
-                "Predição registrada no banco de auditoria."
+                "Simulação registrada. Responda ao questionário abaixo."
+                if modo_ivc else "Predição registrada no banco de auditoria."
             )
 
 
@@ -2341,6 +2386,14 @@ if not modo_admin:
                 "para visualizar a explicação individual."
             )
 
+
+    if modo_ivc and st.session_state.get("ivc_teste_atual"):
+        with aba_predicao:
+            if testes_anteriores:
+                st.metric("Probabilidade calculada no caso IVC",
+                          f"{testes_anteriores[0]['probabilidade']:.1%}")
+                st.write(f"Classificação: {testes_anteriores[0]['classificacao']}")
+            questionario(supabase, usuario_id, st.session_state["ivc_teste_atual"])
 
     # =====================================================
     # ABA — ENTENDA A DECISÃO

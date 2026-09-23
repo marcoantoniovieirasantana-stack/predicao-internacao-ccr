@@ -8,10 +8,7 @@ from html import escape
 from uuid import uuid4
 from datetime import datetime, timezone
 from supabase import create_client
-from ivc_module import (
-    inscrito, registrar_teste, questionario, CODIGO_CASO,
-    exibir_caso, divergencias_caso,
-)
+from ivc_module import inscrito, registrar_teste
 
 
 # =========================================================
@@ -1400,19 +1397,6 @@ except Exception:
     st.error("Não foi possível verificar o acesso à avaliação IVC.")
     st.stop()
 
-if modo_ivc:
-    try:
-        testes_anteriores = (supabase.table("ivc_testes")
-            .select("id,probabilidade,classificacao")
-            .eq("avaliador_id", usuario_id)
-            .order("criado_em", desc=True).limit(1).execute().data)
-    except Exception:
-        st.error("Não foi possível consultar o caso de avaliação.")
-        st.stop()
-    if testes_anteriores:
-        st.session_state["ivc_teste_atual"] = testes_anteriores[0]["id"]
-else:
-    testes_anteriores = []
 
 rotulos_perfil = {
     "digitador": "Digitador",
@@ -1425,7 +1409,7 @@ st.sidebar.write(
     f"{rotulos_perfil.get(tipo_perfil, tipo_perfil)}"
 )
 if modo_ivc:
-    st.sidebar.info("Modo IVC: simulações separadas da auditoria clínica.")
+    st.sidebar.info("Modo IVC: predições registradas separadamente da auditoria clínica. A avaliação é feita no REDCap.")
 
 
 if usuario_id != USUARIO_TESTE_ID:
@@ -1668,8 +1652,6 @@ if not modo_admin:
             st.markdown(
                 "### Cadastro para predição"
             )
-            if modo_ivc:
-                exibir_caso()
 
 
         with col_novo:
@@ -1678,7 +1660,6 @@ if not modo_admin:
                 "➕ Iniciar novo paciente",
                 use_container_width=True,
                 on_click=iniciar_novo_paciente,
-                disabled=bool(modo_ivc and testes_anteriores),
             )
 
 
@@ -1713,7 +1694,7 @@ if not modo_admin:
             with col1:
 
                 prontuario = st.text_input(
-                    "Prontuário de teste" if modo_ivc else "Prontuário",
+                    "Prontuário",
                     value="",
                     placeholder="Digite o prontuário",
                     key=(
@@ -1995,7 +1976,6 @@ if not modo_admin:
         calcular = st.button(
             "🧠 Calcular risco de internação prolongada",
             type="primary",
-            disabled=bool(modo_ivc and testes_anteriores),
             use_container_width=True,
             key=(
                 f"calcular_"
@@ -2132,21 +2112,6 @@ if not modo_admin:
 
 
                 st.stop()
-
-            if modo_ivc:
-                divergencias = divergencias_caso(
-                    prontuario, data_internacao, data_cirurgia,
-                    valores, predictors, schema, formatar_categoria,
-                )
-                if divergencias:
-                    st.error(
-                        "Os campos abaixo estão diferentes do caso de avaliação. "
-                        "Confira os dados do caso e corrija antes de calcular."
-                    )
-                    for campo in divergencias:
-                        st.write(f"- {campo}")
-                    st.stop()
-
 
             # =============================================
             # DATAFRAME
@@ -2290,7 +2255,8 @@ if not modo_admin:
             try:
                 if modo_ivc:
                     registrar_teste(supabase, usuario_id, usuario_email,
-                                    id_predicao, prob, classificacao_prevista)
+                                    id_predicao, prob, classificacao_prevista,
+                                    registro)
                     st.session_state["ivc_teste_atual"] = id_predicao
                 else:
                     supabase.table("auditoria_predicoes").insert(registro).execute()
@@ -2366,24 +2332,20 @@ if not modo_admin:
 
 
             st.success(
-                "Simulação registrada. Responda ao questionário abaixo."
+                "Simulação registrada separadamente da auditoria. Responda ao formulário de avaliação no REDCap, conforme as orientações da equipe de pesquisa."
                 if modo_ivc else "Predição registrada no banco de auditoria."
             )
 
+
+            if modo_ivc:
+                st.code(id_predicao, language=None)
+                st.caption("Identificador da simulação: informe no REDCap se houver um campo correspondente.")
 
             st.info(
                 "Abra **🧠 Entenda a decisão** "
                 "para visualizar a explicação individual."
             )
 
-
-    if modo_ivc and st.session_state.get("ivc_teste_atual"):
-        with aba_predicao:
-            if testes_anteriores:
-                st.metric("Probabilidade calculada no caso IVC",
-                          f"{testes_anteriores[0]['probabilidade']:.1%}")
-                st.write(f"Classificação: {testes_anteriores[0]['classificacao']}")
-            questionario(supabase, usuario_id, st.session_state["ivc_teste_atual"])
 
     # =====================================================
     # ABA — ENTENDA A DECISÃO

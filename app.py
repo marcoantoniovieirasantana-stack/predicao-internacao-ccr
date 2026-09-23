@@ -9,8 +9,7 @@ from datetime import datetime, timezone
 from supabase import create_client
 from ivc_module import (
     inscrito, registrar_teste, questionario, CODIGO_CASO,
-    PRONTUARIO_CASO, DATA_INTERNACAO, DATA_CIRURGIA,
-    exibir_caso, valor_inicial, VALORES_CASO,
+    exibir_caso, divergencias_caso,
 )
 
 
@@ -769,17 +768,11 @@ def criar_campo(
         "type"
     ) == "numeric":
 
-        valor_padrao = (
-            valor_inicial(feature, meta, formatar_categoria)
-            if modo_ivc else None
-        )
-
         valores[
             feature
         ] = st.number_input(
             label,
-            value=valor_padrao,
-            disabled=bool(modo_ivc and valor_padrao is not None),
+            value=None,
             step=1,
             format="%d",
             placeholder="Informe o valor",
@@ -806,18 +799,12 @@ def criar_campo(
 
         if options:
 
-            valor_padrao = (
-                valor_inicial(feature, meta, formatar_categoria)
-                if modo_ivc else None
-            )
-
             valores[
                 feature
             ] = st.selectbox(
                 label,
                 options=options,
-                index=options.index(valor_padrao) if valor_padrao is not None else None,
-                disabled=bool(modo_ivc and valor_padrao is not None),
+                index=None,
                 placeholder="Selecione uma opção",
                 format_func=(
                     (lambda v: {"0": "0", "1": "I", "2": "II", "3": "III", "4": "IV"}.get(str(v), str(v)))
@@ -1674,18 +1661,6 @@ if not modo_admin:
             )
             if modo_ivc:
                 exibir_caso()
-                campos_sem_preenchimento = [
-                    nomes_clinicos.get(f, f)
-                    for f in predictors
-                    if f in VALORES_CASO and valor_inicial(
-                        f, schema.get(f, {}), formatar_categoria
-                    ) is None
-                ]
-                if campos_sem_preenchimento:
-                    st.warning(
-                        "Confira e preencha manualmente os campos sem correspondência "
-                        "automática no modelo: " + ", ".join(campos_sem_preenchimento)
-                    )
 
 
         with col_novo:
@@ -1729,9 +1704,8 @@ if not modo_admin:
             with col1:
 
                 prontuario = st.text_input(
-                    "Código do caso de avaliação" if modo_ivc else "Prontuário",
-                    value=PRONTUARIO_CASO if modo_ivc else "",
-                    disabled=modo_ivc,
+                    "Prontuário de teste" if modo_ivc else "Prontuário",
+                    value="",
                     placeholder="Digite o prontuário",
                     key=(
                         f"prontuario_"
@@ -1745,8 +1719,7 @@ if not modo_admin:
                 data_internacao = (
                     st.date_input(
                         "Data da internação",
-                        value=DATA_INTERNACAO if modo_ivc else None,
-                        disabled=modo_ivc,
+                        value=None,
                         format="DD/MM/YYYY",
                         key=(
                             f"data_internacao_"
@@ -1761,8 +1734,7 @@ if not modo_admin:
                 data_cirurgia = (
                     st.date_input(
                         "Data da cirurgia",
-                        value=DATA_CIRURGIA if modo_ivc else None,
-                        disabled=modo_ivc,
+                        value=None,
                         format="DD/MM/YYYY",
                         key=(
                             f"data_cirurgia_"
@@ -2152,6 +2124,20 @@ if not modo_admin:
 
                 st.stop()
 
+            if modo_ivc:
+                divergencias = divergencias_caso(
+                    prontuario, data_internacao, data_cirurgia,
+                    valores, predictors, schema, formatar_categoria,
+                )
+                if divergencias:
+                    st.error(
+                        "Os campos abaixo estão diferentes do caso de avaliação. "
+                        "Confira os dados do caso e corrija antes de calcular."
+                    )
+                    for campo in divergencias:
+                        st.write(f"- {campo}")
+                    st.stop()
+
 
             # =============================================
             # DATAFRAME
@@ -2294,11 +2280,6 @@ if not modo_admin:
             # =============================================
             try:
                 if modo_ivc:
-                    if (prontuario.strip() != PRONTUARIO_CASO
-                            or data_internacao != DATA_INTERNACAO
-                            or data_cirurgia != DATA_CIRURGIA):
-                        st.error("Confira o prontuário e as datas do caso de avaliação.")
-                        st.stop()
                     registrar_teste(supabase, usuario_id, usuario_email,
                                     id_predicao, prob, classificacao_prevista)
                     st.session_state["ivc_teste_atual"] = id_predicao
